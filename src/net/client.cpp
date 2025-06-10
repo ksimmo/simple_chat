@@ -24,6 +24,7 @@ bool Client::initialize(std::string host, int port, int maxevents, SSL_CTX* ctx)
 
     this->is_connected = false; //connect will not always happen in time! we extra need to check first
     this->is_ssl_connected = false;
+    this->ssl_available = (ctx!=nullptr);
 
     this->sock = new SecureSocket(AF_INET, SOCK_STREAM, 0, ctx);
     bool status = this->sock->is_valid();
@@ -86,6 +87,8 @@ bool Client::initialize(std::string host, int port, int maxevents, SSL_CTX* ctx)
         return status;
     }
 
+    this->rw_buffer = new char[RW_BUFFER_SIZE];
+
     return status;
 }
 
@@ -111,30 +114,92 @@ void Client::shutdown()
 
     this->is_connected = false;
     this->is_ssl_connected = false;
+
+    delete[] this->rw_buffer;
 }
 
 ///////////////////////////////////////////////////
-void Client::handle_events()
+void Client::handle_events(int timeout)
 {
-    int n_fd = epoll_wait(this->epoll_fd, this->epoll_evs, this->epoll_max_events, -1);
+    int n_fd = epoll_wait(this->epoll_fd, this->epoll_evs, this->epoll_max_events, timeout);
     if(n_fd==-1)
     {
         if(n_fd!=EINTR)
         {
             std::cerr << "[-]Cannot wait for epoll: " << strerror(errno) << "(" << errno << ") !" << std::endl;
+            this->shutdown();
             return;
         }
+    }
+    else if(n_fd==0)
+    {
+        std::cerr << "[-] Epoll timed out!" << std::endl;
+        this->shutdown();
+        return;
     }
 
     for(int i=0;i<n_fd;i++)
     {
+        if(this->epoll_evs[i].events & EPOLLERR || this->epoll_evs[i].events & EPOLLHUP)
+        {
+            std::cerr << "[-] Server closed connection!" << std::endl;
+            this->shutdown();
+            return;
+        }
+
+        if(this->is_connected && !this->is_ssl_connected && this->ssl_available)
+        {
+            StatusType st = this->sock->connect_secure();
+            if(st==ST_SUCCESS)
+            {
+                this->is_ssl_connected = true;
+                std::cout << "SSL connected!" << std::endl;
+            }
+            else if(st==ST_FAIL)
+            {
+                this->shutdown();
+                return;
+            }
+        }
+
+        if (this->epoll_evs[i].events & EPOLLOUT)
+        {
+            if(!this->is_connected)
+            {
+                std::cout << "Successfully connected!" << std::endl;
+                this->is_connected = true;
+                continue;
+            }
+
+            //ok we can send again
+        }
         if(this->epoll_evs[i].events & EPOLLIN)
-            std::cout << "EPOLLIN received" << std::endl;
-        if(this->epoll_evs[i].events & EPOLLOUT)
-            std::cout << "EPOLLOUT received" << std::endl;
-        if(this->epoll_evs[i].events & EPOLLERR)
-            std::cout << "EPOLLERR received" << std::endl;
-        if(this->epoll_evs[i].events & EPOLLHUP)
-            std::cout << "EPOLLHUP received" << std::endl;
+        {
+            //is there data to receive?
+            if(this->is_ssl_connected && this->ssl_available || this->is_connected && !this->ssl_available)
+            {
+                //read
+                int result = this->sock->read(this->rw_buffer, RW_BUFFER_SIZE);
+                if(result<=0)
+                {
+                    if(result==-1)
+                    {
+                        this->shutdown();
+                        std::cerr << "[-]Read error!" << std::endl;
+                    }
+                    continue;
+                    
+                }
+                else if(result==0)
+                {
+                    this->shutdown();
+                    std::cerr << "[-] Server disconnected" << std::endl;
+                }
+                else
+                {
+                    std::cout << "we got data " << result << std::endl;
+                }
+            }
+        }
     }
 }

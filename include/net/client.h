@@ -13,6 +13,9 @@ private:
 
     bool is_connected = false;
     bool is_ssl_connected = false;
+    bool ssl_available = false;
+
+    char* rw_buffer = nullptr;
     
 public:
     Client();
@@ -23,7 +26,7 @@ public:
 
     void shutdown();
 
-    void handle_events();
+    void handle_events(int timeout=100);
 };
 
 #endif

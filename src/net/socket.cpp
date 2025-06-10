@@ -133,6 +133,32 @@ StatusType Socket::accept(Socket* newsock)
     return status;
 }
 
+//just wrap read
+int Socket::read(char* buffer, int buffer_length)
+{
+    int result = recv(this->sock, buffer, buffer_length, 0);
+    if(result==-1)
+    {
+        if(errno==EWOULDBLOCK || errno==EAGAIN)
+            result = -2; //in progress
+    }
+
+    return result;
+}
+
+//just wrap write
+int Socket::write(char*buffer, int buffer_length)
+{
+    int result = send(this->sock, buffer, buffer_length, 0);
+    if(result==-1)
+    {
+        if(errno==EWOULDBLOCK || errno==EAGAIN)
+            result = -2; //in progress
+    }
+
+    return result;
+}
+
 //check if socket is in blocking or non-blocking mode
 bool Socket::is_blocking()
 {
@@ -176,7 +202,8 @@ bool Socket::shutdown(int how)
 
     bool status = (result==0);
     if(!status)
-        std::cerr << "Cannot shutdown: " << strerror(errno) << "(" << errno << ") !" << std::endl;
+        if(errno!=ENOTCONN) //ENOTCONN is not that bad as the other side could have closed the connection
+            std::cerr << "Cannot shutdown: " << strerror(errno) << "(" << errno << ") !" << std::endl;
 
     return status;
 }

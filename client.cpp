@@ -11,6 +11,7 @@ void quit_loop(int sig)
 
 int main(int argc, char* argv[])
 {
+    signal(SIGINT, &quit_loop);
     init_openssl();
 
     SSL_CTX* ctx = SSL_CTX_new(TLS_client_method());
@@ -35,8 +36,9 @@ int main(int argc, char* argv[])
     */
 
     Client* client = new Client();
-    client->initialize("127.0.0.1", 69100);
-    while(main_loop_run)
+    client->initialize("127.0.0.1", 69100, 100, ctx);
+
+    while(main_loop_run && client->is_initialized())
     {
         client->handle_events();
     }

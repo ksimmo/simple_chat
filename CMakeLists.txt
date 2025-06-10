@@ -12,10 +12,10 @@ message(STATUS "Using OpenSSL ${OPENSSL_VERSION} ${OPENSSL_INCLUDE_DIRS}")
 include_directories(${CMAKE_SOURCE_DIR}/include ${OPENSSL_INCLUDE_DIRS})
 
 # Add server executable
-add_executable(server server.cpp src/net/socket.cpp src/net/secure_socket.cpp src/net/host.cpp)
+add_executable(server server.cpp src/net/socket.cpp src/net/secure_socket.cpp src/net/host.cpp src/net/packet.cpp)
 
 # Add client executable
-add_executable(client client.cpp src/net/socket.cpp src/net/secure_socket.cpp src/net/client.cpp)
+add_executable(client client.cpp src/net/socket.cpp src/net/secure_socket.cpp src/net/client.cpp src/net/packet.cpp)
 
 # Platform-specific settings
 if(WIN32)

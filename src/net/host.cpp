@@ -3,7 +3,26 @@
 #include <errno.h>
 #include <cstring>
 #include <sys/epoll.h>
+
 #include "net/host.h"
+
+
+Peer::Peer(SSL_CTX* ctx)
+{
+    this->sock = new SecureSocket(ctx);
+}
+
+Peer::~Peer()
+{
+    if(this->sock!=nullptr)
+        delete this->sock;
+}
+
+void Peer::add_to_buffer(char* buf, int length)
+{
+}
+
+////////////////////////////////////////////////////////
 
 Host::Host()
 {
@@ -86,6 +105,8 @@ bool Host::initialize(int port, int maxevents, SSL_CTX* ctx)
     this->epoll_evs = new epoll_event[maxevents];
     this->epoll_max_events = maxevents;
 
+    this->rw_buffer =  new char[RW_BUFFER_SIZE];
+
     return status;
 }
 
@@ -96,7 +117,7 @@ void Host::shutdown()
         return; //nothing to do
 
     //disconnect clients
-    for(const auto &p:this->connections)
+    for(auto p : this->connections)
         delete p.second; //delete socket
     this->connections.clear(); 
 
@@ -113,39 +134,50 @@ void Host::shutdown()
         this->epoll_evs = nullptr;
     }
     this->epoll_max_events = -1;
+
+    if(this->rw_buffer!=nullptr)
+    {
+        delete[] this->rw_buffer;
+        this->rw_buffer = nullptr;
+    }
+
 }
 
 //////////////////////////////
 void Host::accept_client()
 {
-    SecureSocket* client = new SecureSocket(this->ctx);
-    StatusType status = this->sock_listen->accept(client);
+    Peer* peer = new Peer(this->ctx);
+    StatusType status = this->sock_listen->accept(peer->get_socket());
     if(status==ST_SUCCESS)
     {
-        bool temp = client->set_blocking(false);
+        bool temp = peer->get_socket()->set_blocking(false);
         if(temp)
         {
             //add client to epoll
             struct epoll_event ev;
             ev.events = EPOLLIN | EPOLLOUT | EPOLLERR | EPOLLHUP;
-            ev.data.fd = client->get_fd();
-            int result = epoll_ctl(this->epoll_fd, EPOLL_CTL_ADD, client->get_fd(), &ev);
+            ev.data.fd = peer->get_socket()->get_fd();
+            int result = epoll_ctl(this->epoll_fd, EPOLL_CTL_ADD, ev.data.fd, &ev);
             if(result==-1) 
             {
-                delete client;
+                delete peer;
                 std::cerr << "[-]Cannot add client to epoll: " << strerror(errno) << "(" << errno << ") !" << std::endl;
             }
             else
             {
-                std::cout << "Client connected!" << std::endl;
-                this->connections.insert(std::make_pair(client->get_fd(), client));
+                std::cout << "New client connected!" << std::endl;
+                this->connections.insert(std::make_pair(peer->get_socket()->get_fd(), peer));
             }
+        }
+        else
+        {
+            delete peer;
         }
     }
     else
     {
         std::cerr << "[-]Cannot accept client: " << strerror(errno) << "(" << errno << ") !" << std::endl;
-        delete client;
+        delete peer;
     }
 }
 
@@ -161,39 +193,116 @@ void Host::disconnect_client(int fd)
     }
 
     //close connection and remove from active clients
-    delete this->connections[fd];
-    this->connections.erase(fd);
+    auto entry = this->connections.find(fd);
+    delete entry->second;
+    entry->second = nullptr;
     std::cout << "Client disconnected" << std::endl;
 }
 
-void Host::handle_events()
+void Host::handle_events(int timeout)
 {
-    int n_fd = epoll_wait(this->epoll_fd, this->epoll_evs, this->epoll_max_events, -1);
+    int n_fd = epoll_wait(this->epoll_fd, this->epoll_evs, this->epoll_max_events, timeout);
     if(n_fd==-1)
     {
         if(n_fd!=EINTR)
         {
             std::cerr << "[-]Cannot wait for epoll: " << strerror(errno) << "(" << errno << ") !" << std::endl;
+            this->shutdown();
             return;
         }
     }
+    if(n_fd==0)
+    {
+        std::cerr << "[+]Epoll timed out!" << std::endl;
+        return;
+    }
     for(int i=0;i<n_fd;i++)
     {
-        if(this->epoll_evs[i].data.fd==this->sock_listen->get_fd() && this->epoll_evs[i].events & EPOLLIN)
+        if(this->epoll_evs[i].data.fd==this->sock_listen->get_fd()) //our listen socket
         {
-            //accept new client
-            this->accept_client();
-            
+            if(this->epoll_evs[i].events & EPOLLIN)
+                this->accept_client();
         }
-        else if(this->epoll_evs[i].events==EPOLLIN)
+        else //all other clients
         {
-            //handle client data
+            //get peer
+            Peer* peer = this->connections[this->epoll_evs[i].data.fd];
+            if(peer->should_disconnect)
+                continue;
+            if(this->epoll_evs[i].events & EPOLLERR || this->epoll_evs[i].events & EPOLLHUP)
+            {
+                std::cerr << "[-] Client closed connection!" << std::endl;
+                peer->should_disconnect = true;
+                continue;
+            }
 
-            //if read fails = 0 -> client is disconnected, -1 also disconnect client
+            //ok first check if ssl is established
+            if(!peer->is_ssl_connected && this->ctx!=nullptr) //only use SSL if available
+            {
+                StatusType st = peer->get_socket()->accept_secure();
+                if(st==ST_SUCCESS)
+                {
+                    peer->is_ssl_connected = true;
+                    std::cout << "SSL established!" << std::endl;
+
+                    char* temp = "hallo\n";
+                    peer->get_socket()->write(temp, 6);
+                }
+                else if(st==ST_FAIL)
+                {
+                    peer->should_disconnect = true; 
+                    continue;
+                }
+            }
+
+            if(this->epoll_evs[i].events & EPOLLIN)
+            {
+                if((peer->is_ssl_connected && this->ctx!=nullptr) ||
+                    (!peer->is_ssl_connected && this->ctx==nullptr))
+                {
+                    //read
+                    int result = peer->get_socket()->read(this->rw_buffer, RW_BUFFER_SIZE);
+                    if(result<0)
+                    {
+                        if(result==-1)
+                        {
+                            peer->should_disconnect = true;
+                            std::cerr << "[-]Read error!" << std::endl;
+                        }
+                        continue;
+                    }
+                    else if(result==0)
+                    {
+                        peer->should_disconnect = true;
+                    }
+                    else
+                    {
+                        std::cout << "we got data " << result << std::endl;
+                    }
+                }
+            }
+            if(this->epoll_evs[i].events & EPOLLOUT)
+            {
+                if((peer->is_ssl_connected && this->ctx!=nullptr) ||
+                    (!peer->is_ssl_connected && this->ctx==nullptr))
+                {
+                    //write
+                }
+            }
+
+
         }
-        else if(this->epoll_evs[i].events==EPOLLOUT)
+    }
+
+    //handle disconnects here
+    for(auto it=this->connections.begin();it!=this->connections.end();)
+    {
+        if(it->second->should_disconnect)
         {
-            //write out to client
+            this->disconnect_client(it->first);
+            it = this->connections.erase(it);
         }
+        else
+            it++;
     }
 }

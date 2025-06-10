@@ -1,9 +1,26 @@
 #ifndef HOST_H
 #define HOST_H
 
+#include <deque>
 #include <unordered_map>
 
 #include "net/secure_socket.h"
+
+class Peer
+{
+private:
+    SecureSocket* sock = nullptr;
+    std::deque<char> buffer;
+public:
+    Peer(SSL_CTX* ctx);
+    ~Peer();
+
+    bool is_ssl_connected = false;
+    bool should_disconnect = false;
+
+    SecureSocket* get_socket() { return this->sock; }
+    void add_to_buffer(char* buf, int length);
+};
 
 class Host
 {
@@ -14,7 +31,8 @@ private:
     int epoll_max_events = -1;
     struct epoll_event* epoll_evs = nullptr;
 
-    std::unordered_map<int, SecureSocket*> connections;
+    std::unordered_map<int, Peer*> connections;
+    char* rw_buffer = nullptr;
 
     void accept_client();
     void disconnect_client(int fd);
@@ -25,7 +43,7 @@ public:
     bool initialize(int port, int maxevents=1000, SSL_CTX* ctx=nullptr);
     bool is_initialized() {return this->sock_listen!=nullptr;}
 
-    void handle_events();
+    void handle_events(int timeout=-1); //by default server does not timeout
 
     void shutdown();
 };

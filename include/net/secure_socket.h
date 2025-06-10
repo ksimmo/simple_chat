@@ -21,6 +21,15 @@ public:
     ~SecureSocket();
 
     SSL* get_ssl() { return this->ssl; }
+
+    StatusType connect_secure();
+    StatusType accept_secure();
+
+    bool shutdown_secure();
+
+    //overwrite read & write
+    int read(char* buffer, int buffer_length);
+    int write(char* buffer, int buffer_length);
 };
 
 #endif

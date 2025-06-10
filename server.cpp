@@ -64,12 +64,12 @@ int main(int argc, char* argv[])
     */
 
     Host* host = new Host();
-    bool status = host->initialize(69100);
+    bool status = host->initialize(69100, 1000, ctx);
     if(!status)
     {
         std::cerr << "Cannot create host!" << std::endl;
     }
-    while(main_loop_run)
+    while(main_loop_run && host->is_initialized())
     {
         host->handle_events();
     }
