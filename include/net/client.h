@@ -2,6 +2,7 @@
 #define CLIENT_H
 
 #include "net/secure_socket.h"
+#include "net/packet.h"
 
 class Client
 {
@@ -14,8 +15,10 @@ private:
     bool is_connected = false;
     bool is_ssl_connected = false;
     bool ssl_available = false;
-
+    
     char* rw_buffer = nullptr;
+    PacketBuffer buffer_in;
+    PacketBuffer buffer_out;
     
 public:
     Client();

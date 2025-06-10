@@ -197,9 +197,11 @@ void Client::handle_events(int timeout)
                 }
                 else
                 {
-                    std::cout << "we got data " << result << std::endl;
+                    this->buffer_in.append(this->rw_buffer, result);
                 }
             }
         }
     }
+
+    //parse packets
 }

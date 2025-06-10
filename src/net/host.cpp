@@ -18,8 +18,14 @@ Peer::~Peer()
         delete this->sock;
 }
 
-void Peer::add_to_buffer(char* buf, int length)
+void Peer::add_to_buffer(char* buffer, int buffer_length)
 {
+    this->buffer_in.append(buffer, buffer_length);
+}
+
+void Peer::assemble_packages()
+{
+    
 }
 
 ////////////////////////////////////////////////////////
@@ -244,9 +250,6 @@ void Host::handle_events(int timeout)
                 {
                     peer->is_ssl_connected = true;
                     std::cout << "SSL established!" << std::endl;
-
-                    char* temp = "hallo\n";
-                    peer->get_socket()->write(temp, 6);
                 }
                 else if(st==ST_FAIL)
                 {
@@ -277,7 +280,7 @@ void Host::handle_events(int timeout)
                     }
                     else
                     {
-                        std::cout << "we got data " << result << std::endl;
+                        peer->add_to_buffer(this->rw_buffer, result);
                     }
                 }
             }
@@ -294,9 +297,12 @@ void Host::handle_events(int timeout)
         }
     }
 
-    //handle disconnects here
     for(auto it=this->connections.begin();it!=this->connections.end();)
     {
+        //assemble packages
+        it->second->assemble_packages();
+
+        //handle disconnects here
         if(it->second->should_disconnect)
         {
             this->disconnect_client(it->first);

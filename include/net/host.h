@@ -1,16 +1,18 @@
 #ifndef HOST_H
 #define HOST_H
 
-#include <deque>
 #include <unordered_map>
 
 #include "net/secure_socket.h"
+#include "net/packet.h"
 
 class Peer
 {
 private:
     SecureSocket* sock = nullptr;
-    std::deque<char> buffer;
+    PacketBuffer buffer_in;
+    PacketBuffer buffer_out;
+    
 public:
     Peer(SSL_CTX* ctx);
     ~Peer();
@@ -19,7 +21,8 @@ public:
     bool should_disconnect = false;
 
     SecureSocket* get_socket() { return this->sock; }
-    void add_to_buffer(char* buf, int length);
+    void add_to_buffer(char* buffer, int buffer_length);
+    void assemble_packages();
 };
 
 class Host

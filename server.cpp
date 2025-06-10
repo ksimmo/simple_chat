@@ -23,46 +23,6 @@ int main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
 
-    /*
-    SecureSocket* sock = new SecureSocket(AF_INET, SOCK_STREAM, 0, ctx);
-    bool status = sock->bind(69100);
-    if(status)
-        std::cout << "Sucessfully binded!" << std::endl;
-    else
-    {
-        std::cout << "Could not bind socket!" << std::endl;
-        delete sock;
-        return -1;
-    }
-
-    status = sock->listen();
-    if(status)
-        std::cout << "Sucessfully listen!" << std::endl;
-    else
-    {
-        std::cout << "Could not listen on socket!" << std::endl;
-        delete sock;
-        return -1;
-    }
-
-    SecureSocket* client = new SecureSocket(ctx);
-    status = sock->accept(client);
-    if(status)
-        std::cout << "Client successfully connected!" << std::endl;
-    else
-    {
-        std::cout << "Client could not connect!" << std::endl;
-        delete sock;
-        return -1;
-    }
-
-    if(client!=nullptr)
-        delete client;
-
-
-    delete sock;
-    */
-
     Host* host = new Host();
     bool status = host->initialize(69100, 1000, ctx);
     if(!status)
@@ -71,7 +31,12 @@ int main(int argc, char* argv[])
     }
     while(main_loop_run && host->is_initialized())
     {
+        //send packets and receive data
         host->handle_events();
+
+        //ok now process packets
+
+        //after processing packets delete used packages
     }
     delete host;
 

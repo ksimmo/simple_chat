@@ -9,7 +9,7 @@
 #include <sys/socket.h>
 #endif
 
-#define RW_BUFFER_SIZE 256*1024
+#define RW_BUFFER_SIZE 16*1024 //do not make packages too large
 
 enum StatusType {ST_FAIL=-1, ST_INPROGRESS=0, ST_SUCCESS=1}; //we mainly need this due to asynchronous calls may not finish in time
 
