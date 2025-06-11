@@ -124,7 +124,7 @@ void Client::handle_events(int timeout)
     int n_fd = epoll_wait(this->epoll_fd, this->epoll_evs, this->epoll_max_events, timeout);
     if(n_fd==-1)
     {
-        if(n_fd!=EINTR)
+        if(errno!=EINTR)
         {
             std::cerr << "[-]Cannot wait for epoll: " << strerror(errno) << "(" << errno << ") !" << std::endl;
             this->shutdown();
@@ -204,4 +204,5 @@ void Client::handle_events(int timeout)
     }
 
     //parse packets
+    
 }

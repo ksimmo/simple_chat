@@ -9,20 +9,20 @@
 class Peer
 {
 private:
+    SSL_CTX* ctx = nullptr;
     SecureSocket* sock = nullptr;
-    PacketBuffer buffer_in;
-    PacketBuffer buffer_out;
     
 public:
     Peer(SSL_CTX* ctx);
     ~Peer();
 
+    PacketBuffer buffer_in;
+    PacketBuffer buffer_out;
     bool is_ssl_connected = false;
     bool should_disconnect = false;
 
     SecureSocket* get_socket() { return this->sock; }
-    void add_to_buffer(char* buffer, int buffer_length);
-    void assemble_packages();
+    void handle_events(uint32_t evs, char* rw_buffer, int buffer_length);
 };
 
 class Host

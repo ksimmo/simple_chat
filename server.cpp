@@ -1,5 +1,7 @@
 #include <iostream>
 #include <signal.h>
+
+#include <sqlite3.h>
 #include "net/net.h"
 
 bool main_loop_run = true;
@@ -31,10 +33,10 @@ int main(int argc, char* argv[])
     }
     while(main_loop_run && host->is_initialized())
     {
-        //send packets and receive data
+        //send packets and receive packets
         host->handle_events();
 
-        //ok now process packets
+        //ok now process incoming packets & create outgoing packets
 
         //after processing packets delete used packages
     }
