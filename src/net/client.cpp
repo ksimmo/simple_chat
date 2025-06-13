@@ -22,25 +22,10 @@ bool Client::initialize(std::string host, int port, int maxevents, SSL_CTX* ctx)
         return true;
     }
 
-    this->is_connected = false; //connect will not always happen in time! we extra need to check first
-    this->is_ssl_connected = false;
-    this->ssl_available = (ctx!=nullptr);
-
-    this->sock = new SecureSocket(AF_INET, SOCK_STREAM, 0, ctx);
-    bool status = this->sock->is_valid();
+    this->peer = new Peer(ctx);
+    bool status = this->peer->create();
     if(!status)
     {
-        std::cerr << "[-] Cannot create socket!" << std::endl;
-        this->shutdown();
-        return status;
-    }
-
-    status = this->sock->set_blocking(false);
-    if(status)
-        std::cout << "[+] Succesfully set to non-blocking mode!" << std::endl;
-    else
-    {
-        std::cerr << "[-] Failed set to non-blocking mode!" << std::endl;
         this->shutdown();
         return status;
     }
@@ -57,8 +42,8 @@ bool Client::initialize(std::string host, int port, int maxevents, SSL_CTX* ctx)
     //add client socket to epoll
     struct epoll_event ev;
     ev.events = EPOLLIN | EPOLLOUT | EPOLLERR | EPOLLHUP; //technically ERR and HUP are queried by default
-    ev.data.fd = this->sock->get_fd();
-    int result = epoll_ctl(this->epoll_fd, EPOLL_CTL_ADD, this->sock->get_fd(), &ev);
+    ev.data.fd = this->peer->get_socket()->get_fd();
+    int result = epoll_ctl(this->epoll_fd, EPOLL_CTL_ADD, ev.data.fd, &ev);
     if(result==-1) 
     {
         std::cerr << "[-]Cannot create epoll ctl: " << strerror(errno) << "(" << errno << ") !" << std::endl;
@@ -69,7 +54,7 @@ bool Client::initialize(std::string host, int port, int maxevents, SSL_CTX* ctx)
     this->epoll_evs = new epoll_event[maxevents];
     this->epoll_max_events = maxevents;
 
-    StatusType st = this->sock->connect(host, port);
+    StatusType st = this->peer->get_socket()->connect(host, port);
     if(st==ST_SUCCESS)
     {
         std::cout << "[+] Succesfully bound to " << host << ":" << port << "!" << std::endl;
@@ -99,8 +84,8 @@ void Client::shutdown()
         return; //nothing to do
 
     //shutdown client socket
-    delete this->sock;
-    this->sock = nullptr;
+    delete this->peer;
+    this->peer = nullptr;
 
     if(this->epoll_fd>=0)
         close(this->epoll_fd);
@@ -112,10 +97,11 @@ void Client::shutdown()
     }
     this->epoll_max_events = -1;
 
-    this->is_connected = false;
-    this->is_ssl_connected = false;
-
-    delete[] this->rw_buffer;
+    if(this->rw_buffer!=nullptr)
+    {
+        delete[] this->rw_buffer;
+        this->rw_buffer = nullptr;
+    }
 }
 
 ///////////////////////////////////////////////////
@@ -140,69 +126,19 @@ void Client::handle_events(int timeout)
 
     for(int i=0;i<n_fd;i++)
     {
-        if(this->epoll_evs[i].events & EPOLLERR || this->epoll_evs[i].events & EPOLLHUP)
-        {
-            std::cerr << "[-] Server closed connection!" << std::endl;
-            this->shutdown();
-            return;
-        }
+        this->peer->handle_secure_connect();
+        this->peer->handle_events(this->epoll_evs[i].events, this->rw_buffer, RW_BUFFER_SIZE);
+        if(this->peer->should_disconnect)
+            break;
+    }
 
-        if(this->is_connected && !this->is_ssl_connected && this->ssl_available)
-        {
-            StatusType st = this->sock->connect_secure();
-            if(st==ST_SUCCESS)
-            {
-                this->is_ssl_connected = true;
-                std::cout << "SSL connected!" << std::endl;
-            }
-            else if(st==ST_FAIL)
-            {
-                this->shutdown();
-                return;
-            }
-        }
-
-        if (this->epoll_evs[i].events & EPOLLOUT)
-        {
-            if(!this->is_connected)
-            {
-                std::cout << "Successfully connected!" << std::endl;
-                this->is_connected = true;
-                continue;
-            }
-
-            //ok we can send again
-        }
-        if(this->epoll_evs[i].events & EPOLLIN)
-        {
-            //is there data to receive?
-            if(this->is_ssl_connected && this->ssl_available || this->is_connected && !this->ssl_available)
-            {
-                //read
-                int result = this->sock->read(this->rw_buffer, RW_BUFFER_SIZE);
-                if(result<=0)
-                {
-                    if(result==-1)
-                    {
-                        this->shutdown();
-                        std::cerr << "[-]Read error!" << std::endl;
-                    }
-                    continue;
-                    
-                }
-                else if(result==0)
-                {
-                    this->shutdown();
-                    std::cerr << "[-] Server disconnected" << std::endl;
-                }
-                else
-                {
-                    this->buffer_in.append(this->rw_buffer, result);
-                }
-            }
-        }
+    if(this->peer->should_disconnect)
+    {
+        this->shutdown();
+        return;
     }
 
     //parse packets
+    this->peer->buffer_in.parse_packets();
     
 }

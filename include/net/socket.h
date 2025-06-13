@@ -28,6 +28,8 @@ public:
     int get_fd() { return this->sock; }
     void link(int sock) { this->sock = sock; }
     void unlink() { this->sock = -1; } //careful when using this -> prevent closing of socket upon delete
+    bool create(int family=AF_INET, int type=SOCK_STREAM, int protocol=0, bool recreate=false);
+
     bool is_blocking();
     bool set_blocking(bool status);
 

@@ -35,6 +35,29 @@ Socket::~Socket()
         close(this->sock);
 }
 
+bool Socket::create(int family, int type, int protocol, bool recreate)
+{
+    if(this->is_valid())
+    {
+        if(recreate)
+        {
+            this->shutdown();
+            close(this->sock);
+        }
+        else
+            return true;
+    }
+    this->sock = socket(family, type, protocol);
+    bool status = true;
+    if(this->sock<0)
+    {
+        std::cerr << "Cannot create socket: " << strerror(errno) << "(" << errno << ") !" << std::endl;
+        status = false;
+    }
+
+    return status;
+}
+
 //connect socket to address (client)
 StatusType Socket::connect(std::string host, int port)
 {

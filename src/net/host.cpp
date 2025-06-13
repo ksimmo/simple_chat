@@ -6,97 +6,6 @@
 
 #include "net/host.h"
 
-
-Peer::Peer(SSL_CTX* ctx)
-{
-    this->ctx = ctx;
-    this->sock = new SecureSocket(ctx);
-}
-
-Peer::~Peer()
-{
-    if(this->sock!=nullptr)
-        delete this->sock;
-}
-
-void Peer::handle_events(uint32_t evs, char* rw_buffer, int buffer_length)
-{
-    if(this->should_disconnect)
-        return;
-    if(evs & EPOLLERR || evs & EPOLLHUP)
-    {
-        std::cerr << "[-] Client closed connection!" << std::endl;
-        this->should_disconnect = true;
-        return;
-    }
-
-    //ok first check if ssl is established
-    if(!this->is_ssl_connected && this->ctx!=nullptr) //only use SSL if available
-    {
-        StatusType st = this->sock->accept_secure();
-        if(st==ST_SUCCESS)
-        {
-            this->is_ssl_connected = true;
-            std::cout << "SSL established!" << std::endl;
-        }
-        else if(st==ST_FAIL)
-        {
-            this->should_disconnect = true; 
-            return;
-        }
-    }
-
-    //we can read
-    if(evs & EPOLLIN)
-    {
-        if((this->is_ssl_connected && this->ctx!=nullptr) ||
-            (!this->is_ssl_connected && this->ctx==nullptr))
-        {
-            //read
-            int result = this->get_socket()->read(rw_buffer, buffer_length);
-            if(result<0)
-            {
-                if(result==-1)
-                {
-                    this->should_disconnect = true;
-                    std::cerr << "[-]Read error!" << std::endl;
-                }
-                return;
-            }
-            else if(result==0)
-            {
-                this->should_disconnect = true;
-            }
-            else
-                this->buffer_in.append(rw_buffer, result);
-        }
-    }
-
-    //ok we can write
-    if(evs & EPOLLOUT)
-    {
-        if((this->is_ssl_connected && this->ctx!=nullptr) ||
-            (!this->is_ssl_connected && this->ctx==nullptr))
-        {
-            //write
-            int result = this->buffer_out.write_packets(rw_buffer, buffer_length);
-            result = this->sock->write(rw_buffer, result);
-            if(result<0)
-            {
-                if(result==-1)
-                {
-                    this->should_disconnect = true;
-                    std::cerr << "[-]Write error!" << std::endl;
-                }
-                return;
-            }
-        }
-    }
-}
-
-
-////////////////////////////////////////////////////////
-
 Host::Host()
 {
 }
@@ -239,6 +148,7 @@ void Host::accept_client()
             else
             {
                 std::cout << "New client connected!" << std::endl;
+                peer->is_connected = true;
                 this->connections.insert(std::make_pair(peer->get_socket()->get_fd(), peer));
             }
         }
@@ -300,6 +210,7 @@ void Host::handle_events(int timeout)
         {
             //get peer
             Peer* peer = this->connections[this->epoll_evs[i].data.fd];
+            peer->handle_secure_accept();
             peer->handle_events(this->epoll_evs[i].events, this->rw_buffer, RW_BUFFER_SIZE);
 
         }

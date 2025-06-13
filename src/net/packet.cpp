@@ -1,21 +1,28 @@
+#include <iostream>
 #include "net/packet.h"
 
-Packet::Packet(std::size_t length)
+Packet::Packet(unsigned char type, std::size_t length)
 {
-    this->data.reserve(length);
-    this->header = (struct PacketHeader*)this->data.data();
+    this->data = new unsigned char[length+sizeof(PacketHeader)];
+    this->header = (struct PacketHeader*)this->data;
+    this->header->type = type;
+    this->header->length = length;
+
+    this->write_pos = 0; //we read and write after header
+    this->read_pos = 0;
 }
 
 Packet::~Packet()
 {
-    this->data.clear();
+    if(this->data!=nullptr)
+        delete[] this->data;
 }
 
-void Packet::append_byte(char byte)
+void Packet::append_byte(unsigned char byte)
 {
-    if(this->write_pos<this->data.size())
+    if(this->write_pos<header->length)
     {
-        this->data[this->write_pos] = byte;
+        this->data[this->write_pos+sizeof(PacketHeader)] = byte;
         this->write_pos++;
     }
 }
@@ -37,7 +44,7 @@ PacketBuffer::~PacketBuffer()
 void PacketBuffer::append(char* buffer, int buffer_length)
 {
     for(int i=0;i<buffer_length;i++)
-        this->buffer.push_front(buffer[i]);
+        this->buffer.push_front(((unsigned char*)buffer)[i]);
 }
 
 //extract packets from buffer
@@ -53,14 +60,17 @@ void PacketBuffer::parse_packets()
             temp.push_back(*it);
 
         PacketHeader header = *((PacketHeader*)temp.data());
-        if(this->buffer.size()<(header.length+header_size))
+        if(this->buffer.size()<(header.length+header_size)) //packet size = header size + payload size
             return; //buffer to short -> packet is not fully received yet
         
         //read packet byte by byte
-        Packet* packet = new Packet(header.length+header_size);
-        for(unsigned int i=0;i<header.length+header_size;i++)
+        Packet* packet = new Packet(header.type, header.length);
+        for(std::size_t i=0;i<header.length+header_size;i++)
         {
-            packet->append_byte(this->buffer.back());
+            if(i>=header_size) //Packet header should not be read! because it is already read
+            {
+                packet->append_byte(this->buffer.back());
+            }
             this->buffer.pop_back();
         }
 
@@ -79,11 +89,12 @@ int PacketBuffer::write_packets(char*buffer, int buffer_length)
     for(int i=0;i<this->packets.size();i++)
     {
         Packet* packet = this->packets.back();
-        if(buffer_length>length+packet->get_length()) //ok we have enough space left to write packet
+        std::size_t packet_length = packet->get_total_length();
+        if(buffer_length>length+packet_length) //ok we have enough space left to write packet
         {
             //put packet into buffer
-            std::copy(packet->get_data(), packet->get_data()+packet->get_length(), buffer+length);
-            length = length + packet->get_length();
+            std::copy(packet->get_data(), packet->get_data()+packet_length, (unsigned char*)buffer+length);
+            length = length + packet_length;
             delete packet; //clear packet
             this->packets.pop_back(); //remove from queue
         }
