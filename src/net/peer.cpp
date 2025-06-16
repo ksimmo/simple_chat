@@ -56,6 +56,7 @@ void Peer::handle_secure_connect()
         {
             this->is_ssl_connected = true;
             std::cout << "SSL established!" << std::endl;
+            this->events.push_back(PE_CONNECTED);
         }
         else if(st==ST_FAIL)
         {
@@ -74,16 +75,7 @@ void Peer::handle_secure_accept()
         {
             this->is_ssl_connected = true;
             std::cout << "SSL established!" << std::endl;
-
-            //simple test -> we will change interface later
-            Packet* packet = new Packet(PK_AUTH_CHALLENGE, 6);
-            packet->append_byte('h');
-            packet->append_byte('e');
-            packet->append_byte('l');
-            packet->append_byte('l');
-            packet->append_byte('o');
-            packet->append_byte('\0');
-            this->buffer_out.add_packet(packet);
+            this->events.push_back(PE_CONNECTED);
         }
         else if(st==ST_FAIL)
         {

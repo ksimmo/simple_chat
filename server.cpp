@@ -19,6 +19,13 @@ int main(int argc, char* argv[])
     SSL_CTX* ctx = SSL_CTX_new(TLS_server_method());
     if(!ctx)
         std::cerr << "Cannot create CTX!" << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+    
+    if (!SSL_CTX_set_min_proto_version(ctx, TLS1_3_VERSION)) //we want to use TLS v1.3!
+    {
+        ERR_print_errors_fp(stderr);
+        exit(EXIT_FAILURE);
+    }
+    
     if (SSL_CTX_use_certificate_file(ctx, "cert.pem", SSL_FILETYPE_PEM) <= 0 ||
         SSL_CTX_use_PrivateKey_file(ctx, "key.pem", SSL_FILETYPE_PEM) <= 0) {
         ERR_print_errors_fp(stderr);

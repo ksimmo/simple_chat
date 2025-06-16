@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 # Find OpenSSL
 find_package(OpenSSL REQUIRED)
-message(STATUS "Using OpenSSL ${OPENSSL_VERSION} ${OPENSSL_INCLUDE_DIRS}")
+message(STATUS "Using OpenSSL ${OPENSSL_VERSION}")
 
 # Find SQLite3
 find_package(SQLite3 REQUIRED)
@@ -15,15 +15,23 @@ message(STATUS "Using SQLite3 ${SQLITE3_VERSION}")
 
 # Find QT6
 find_package(Qt6 REQUIRED COMPONENTS Core Widgets)
-#qt_standard_project_setup()
+message(STATUS "Using Qt6 ${QT6_VERSION}")
+qt_standard_project_setup()
 
-include_directories(${CMAKE_SOURCE_DIR}/include ${OPENSSL_INCLUDE_DIRS} ${SQLITE3_INCLUDE_DIRS})
+#somehow qt include dirs are not found
+include_directories(${CMAKE_SOURCE_DIR}/include ${OPENSSL_INCLUDE_DIRS} ${SQLITE3_INCLUDE_DIRS} /usr/include/qt6)
+
+
+set(NET_SOURCES src/net/socket.cpp
+                src/net/secure_socket.cpp
+                src/net/packet.cpp
+                src/net/peer.cpp )
 
 # Add server executable
-add_executable(server server.cpp src/net/socket.cpp src/net/secure_socket.cpp src/net/host.cpp src/net/packet.cpp src/net/peer.cpp)
+add_executable(server server.cpp src/net/host.cpp ${NET_SOURCES} src/db/database.cpp)
 
 # Add client executable
-add_executable(client client.cpp src/net/socket.cpp src/net/secure_socket.cpp src/net/client.cpp src/net/packet.cpp src/net/peer.cpp)
+add_executable(client client.cpp src/net/client.cpp ${NET_SOURCES} src/db/database.cpp)
 
 # Platform-specific settings
 if(WIN32)
@@ -32,6 +40,6 @@ if(WIN32)
 else()
     # On Unix/Linux systems, no special libraries usually needed for sockets
     target_link_libraries(server OpenSSL::SSL OpenSSL::Crypto SQLite::SQLite3)
-    target_link_libraries(client OpenSSL::SSL OpenSSL::Crypto SQLite::SQLite3)
+    target_link_libraries(client OpenSSL::SSL OpenSSL::Crypto SQLite::SQLite3 Qt6::Core)
 endif()
 

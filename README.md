@@ -5,11 +5,14 @@ The server-client communication is based on non-blocking sockets and TLS encrypt
 ## TODO
 - [ ] Non-Blocking Sockets epoll alternative
 - [x] SSL Handshake
-- [ ] Packet System
+- [x] Packet System
 - [ ] SQLite database for messages and users
 - [ ] Client GUI (QT6)
-- [ ] User authentication system (ECDSA?)
+- [ ] User authentication system (Curve25519)
 - [ ] Maybe add MLS or Double Ratchet E2E encryption
+
+## Server
+The servers main task is to reroute the messages to the corresponding receiver 
 
 ## Usage
 
