@@ -2,10 +2,23 @@
 #define HOST_H
 
 #include <unordered_map>
+#include <mutex>
 
 #include "net/secure_socket.h"
 #include "net/packet.h"
 #include "net/peer.h"
+
+struct HostEvent
+{
+    int fd;
+    PeerEvent ev;
+};
+
+struct HostPacket
+{
+    int fd;
+    Packet* packet;
+};
 
 class Host
 {
@@ -19,6 +32,11 @@ private:
     std::unordered_map<int, Peer*> connections;
     char* rw_buffer = nullptr;
 
+    std::queue<HostEvent> events;
+    std::queue<HostPacket> incomming_packets;
+    std::queue<HostPacket> outgoing_packets;
+    std::mutex mutex;
+
     void accept_client();
     void disconnect_client(int fd);
 public:
@@ -31,6 +49,9 @@ public:
     void handle_events(int timeout=-1); //by default server does not timeout
 
     void shutdown();
+
+    void add_packet(int sender, Packet* packet);
+    HostPacket pop_packet();
 };
 
 #endif

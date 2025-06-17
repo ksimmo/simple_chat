@@ -4,8 +4,9 @@
 #include "net/secure_socket.h"
 #include "net/packet.h"
 
-enum PeerEvents {PE_CONNECTED, PE_HANDSHAKE_FINISHED, PE_DISCONNECTED};
+enum PeerEvent {PE_NONE, PE_CONNECTED, PE_HANDSHAKE_FINISHED, PE_DISCONNECTED};
 
+//class handling socket and incoming and outgoing packets
 class Peer
 {
 private:
@@ -13,7 +14,7 @@ private:
     SecureSocket* sock = nullptr;
     std::string address = "";
     int port = -1;
-    std::vector<PeerEvents> events;
+    std::queue<PeerEvent> events;
     
 public:
     Peer(SSL_CTX* ctx);
@@ -34,8 +35,9 @@ public:
     void handle_secure_accept();
     void handle_events(uint32_t evs, char* rw_buffer, int buffer_length);
 
-    std::vector<PeerEvents> get_events() { return this->events; }
-    void clear_events() { this->events.clear(); }
+    void add_event(PeerEvent ev) { this->events.push(ev); }
+    PeerEvent pop_event();
+    void clear_events();
 };
 
 #endif

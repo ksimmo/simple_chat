@@ -56,7 +56,7 @@ void Peer::handle_secure_connect()
         {
             this->is_ssl_connected = true;
             std::cout << "SSL established!" << std::endl;
-            this->events.push_back(PE_CONNECTED);
+            this->events.push(PE_HANDSHAKE_FINISHED);
         }
         else if(st==ST_FAIL)
         {
@@ -75,7 +75,7 @@ void Peer::handle_secure_accept()
         {
             this->is_ssl_connected = true;
             std::cout << "SSL established!" << std::endl;
-            this->events.push_back(PE_CONNECTED);
+            this->events.push(PE_HANDSHAKE_FINISHED);
         }
         else if(st==ST_FAIL)
         {
@@ -130,6 +130,7 @@ void Peer::handle_events(uint32_t evs, char* rw_buffer, int buffer_length)
         {
             //std::cout << "Successfully connected!" << std::endl;
             this->is_connected = true;
+            this->events.push(PE_CONNECTED);
             //return;
         }
 
@@ -152,5 +153,25 @@ void Peer::handle_events(uint32_t evs, char* rw_buffer, int buffer_length)
                 }
             }
         }
+    }
+}
+
+PeerEvent Peer::pop_event()
+{
+    PeerEvent ev = PE_NONE;
+    if(!this->events.empty())
+    {
+        ev = this->events.front();
+        this->events.pop();
+    }
+
+    return ev;
+}
+
+void Peer::clear_events()
+{
+    while(!this->events.empty())
+    {
+        this->events.pop();
     }
 }

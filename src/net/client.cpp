@@ -23,6 +23,7 @@ bool Client::initialize(std::string host, int port, int maxevents, SSL_CTX* ctx)
     }
 
     this->peer = new Peer(ctx);
+
     bool status = this->peer->create();
     if(!status)
     {
@@ -102,6 +103,19 @@ void Client::shutdown()
         delete[] this->rw_buffer;
         this->rw_buffer = nullptr;
     }
+
+    //delete leftover packets
+    while(!this->incomming_packets.empty())
+    {
+        delete this->incomming_packets.front();
+        this->incomming_packets.pop();
+    }
+
+    while(!this->outgoing_packets.empty())
+    {
+        delete this->outgoing_packets.front();
+        this->outgoing_packets.pop();
+    }
 }
 
 ///////////////////////////////////////////////////
@@ -138,7 +152,58 @@ void Client::handle_events(int timeout)
         return;
     }
 
+    PeerEvent ev = this->peer->pop_event();
+    while(ev!=PE_NONE)
+    {
+        std::lock_guard<std::mutex> lock(this->mutex);
+        this->events.push(ev);
+        ev = this->peer->pop_event();
+    }
+
     //parse packets
     this->peer->buffer_in.parse_packets();
-    
+    Packet* packet = this->peer->buffer_in.pop_packet();
+    while(packet!=nullptr)
+    {
+        std::lock_guard<std::mutex> lock(this->mutex);
+        this->incomming_packets.push(packet);
+        packet = this->peer->buffer_in.pop_packet();
+    }
+
+    std::lock_guard<std::mutex> lock(this->mutex);
+    while(!this->outgoing_packets.empty())
+    {
+        this->peer->buffer_out.add_packet(this->outgoing_packets.front());
+        this->outgoing_packets.pop();
+    }
+}
+
+PeerEvent Client::pop_event()
+{
+    std::lock_guard<std::mutex> lock(this->mutex);
+    if(this->events.empty())
+        return PE_NONE;
+
+    PeerEvent ev = this->events.front();
+    this->events.pop();
+
+    return ev;
+}
+
+void Client::add_packet(Packet* packet)
+{
+    std::lock_guard<std::mutex> lock(this->mutex);
+    this->outgoing_packets.push(packet);
+}
+
+Packet* Client::pop_packet()
+{
+    std::lock_guard<std::mutex> lock(this->mutex);
+    if(this->incomming_packets.empty())
+        return nullptr;
+
+    Packet* packet = this->incomming_packets.front();
+    this->incomming_packets.pop();
+
+    return packet;
 }

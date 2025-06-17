@@ -162,18 +162,18 @@ bool Packet::read_string(std::string& s)
 
 PacketBuffer::PacketBuffer()
 {
-
 }
 
 PacketBuffer::~PacketBuffer()
 {
-
+    this->clear_buffer();
+    this->clear_packets();
 }
 
 //we take a reference and copy the packet such that we do not loose an object
 Packet* PacketBuffer::pop_packet()
 {
-    if(this->packets.size()==0) //no packets left
+    if(this->packets.empty()) //no packets left
         return nullptr;
 
     Packet* packet = this->packets.back();
@@ -237,6 +237,7 @@ int PacketBuffer::write_packets(char*buffer, int buffer_length)
             std::copy(packet->get_data(), packet->get_data()+packet_length, (unsigned char*)buffer+length);
             length = length + packet_length;
             delete packet; //clear packet
+
             this->packets.pop_back(); //remove from queue
         }
         else

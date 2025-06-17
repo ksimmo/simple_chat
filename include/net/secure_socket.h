@@ -6,8 +6,8 @@
 
 #include "socket.h"
 
-void init_openssl();
-void cleanup_openssl();
+SSL_CTX* init_openssl(bool is_client=true, const std::string& cert=std::string(), const std::string& key=std::string());
+void cleanup_openssl(SSL_CTX* ctx);
 
 class SecureSocket : public Socket
 {

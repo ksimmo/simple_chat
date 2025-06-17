@@ -15,20 +15,7 @@ int main(int argc, char* argv[])
 {
     QCoreApplication app(argc, argv);
     signal(SIGINT, &quit_loop);
-    init_openssl();
-
-    SSL_CTX* ctx = SSL_CTX_new(TLS_client_method());
-    if(!ctx)
-    {
-        std::cerr << "Cannot create CTX!" << ERR_error_string(ERR_get_error(), NULL) << std::endl;
-        exit(EXIT_FAILURE);
-    }
-
-    if (!SSL_CTX_set_min_proto_version(ctx, TLS1_3_VERSION)) 
-    {
-        ERR_print_errors_fp(stderr);
-        exit(EXIT_FAILURE);
-    }
+    SSL_CTX* ctx = init_openssl();
 
     //if not exists -> create private/public key pair (long term identity key)
 
@@ -38,11 +25,48 @@ int main(int argc, char* argv[])
     while(main_loop_run && client->is_initialized())
     {
         client->handle_events();
+
+        //pop events and check if we have handshake established
+        PeerEvent ev = client->pop_event();
+        while (ev!=PE_NONE)
+        {
+            switch (ev)
+            {
+                case PE_HANDSHAKE_FINISHED:
+                {
+                    std::cout << "[+]Sending login ..." << std::endl;
+                    Packet* packet = new Packet(PK_LOGIN);
+                    packet->append_string("Username");
+                    client->add_packet(packet);
+                    //maybe also send key
+                    break;
+                }
+            }
+            ev = client->pop_event();
+        }
+
+        //check packets
+        Packet* packet = client->pop_packet();
+        while(packet!=nullptr)
+        {
+            switch(packet->get_type())
+            {
+                case PK_AUTH_CHALLENGE:
+                {
+                    std::string s;
+                    packet->read_string(s);
+                    std::cout << "[+]Received Challenge: " << s << std::endl;
+                    break;
+                }
+            }
+            delete packet;
+            packet = client->pop_packet();
+        }
+        
     }
     delete client;
 
-    SSL_CTX_free(ctx);
-    cleanup_openssl();
+    cleanup_openssl(ctx);
 
     return 0;
 }

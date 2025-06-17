@@ -1,17 +1,52 @@
 #include <iostream>
 #include "net/secure_socket.h"
 
-void init_openssl()
+SSL_CTX* init_openssl(bool is_client, const std::string& cert, const std::string& key)
 {
     SSL_load_error_strings();
     ERR_load_crypto_strings();
     OpenSSL_add_ssl_algorithms();
+
+    SSL_CTX* ctx = nullptr;
+
+    if(is_client)
+        ctx = SSL_CTX_new(TLS_client_method());
+    else
+        ctx = SSL_CTX_new(TLS_server_method());
+    if(!ctx)
+    {
+        std::cerr << "[-]Cannot create CTX: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+        return nullptr;
+    }
+    
+    if (!SSL_CTX_set_min_proto_version(ctx, TLS1_3_VERSION)) //we want to use TLS v1.3!
+    {
+        std::cerr << "[-]Cannot use TLS v1.3: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+        SSL_CTX_free(ctx);
+        return nullptr;
+    }
+    
+    if(!is_client && !cert.empty() && !key.empty())
+    {
+        if (SSL_CTX_use_certificate_file(ctx, "cert.pem", SSL_FILETYPE_PEM) <= 0 ||
+            SSL_CTX_use_PrivateKey_file(ctx, "key.pem", SSL_FILETYPE_PEM) <= 0) {
+            std::cerr << "[-]Cannot load cert and key: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+            SSL_CTX_free(ctx);
+            return nullptr;
+        }
+    }
+
+    return ctx;
 }
 
-void cleanup_openssl()
+void cleanup_openssl(SSL_CTX* ctx)
 {
+    if(ctx!=nullptr)
+        SSL_CTX_free(ctx);
     EVP_cleanup();
 }
+
+////////////////////////////////////////
 
 SecureSocket::SecureSocket(SSL_CTX* ctx) : Socket()
 {

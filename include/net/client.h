@@ -1,6 +1,8 @@
 #ifndef CLIENT_H
 #define CLIENT_H
 
+#include <mutex>
+
 #include "net/secure_socket.h"
 #include "net/packet.h"
 #include "net/peer.h"
@@ -14,6 +16,11 @@ private:
     struct epoll_event* epoll_evs = nullptr;
    
     char* rw_buffer = nullptr;
+
+    std::mutex mutex;
+    std::queue<PeerEvent> events;
+    std::queue<Packet*> incomming_packets;
+    std::queue<Packet*> outgoing_packets;
     
 public:
     Client();
@@ -25,6 +32,10 @@ public:
     void shutdown();
 
     void handle_events(int timeout=100);
+    PeerEvent pop_event();
+
+    void add_packet(Packet* packet);
+    Packet* pop_packet();
 };
 
 #endif

@@ -1,56 +1,93 @@
 #include <iostream>
 #include <signal.h>
+#include <thread>
+#include <atomic>
+#include <mutex>
 
 #include <sqlite3.h>
 #include "net/net.h"
 
-bool main_loop_run = true;
+std::atomic<bool> main_loop_run(true);
+Host* host = nullptr;
 
 void quit_loop(int sig)
 {
     main_loop_run = false;
 }
 
+void network_worker()
+{
+    while(main_loop_run && host->is_initialized())
+    {
+        //send packets and receive packets
+        host->handle_events(1000); // define a timeout otherwise we will never catch the signal
+    }
+}
+
 int main(int argc, char* argv[])
 {
     signal(SIGINT, &quit_loop);
-    init_openssl();
 
-    SSL_CTX* ctx = SSL_CTX_new(TLS_server_method());
-    if(!ctx)
-        std::cerr << "Cannot create CTX!" << ERR_error_string(ERR_get_error(), NULL) << std::endl;
-    
-    if (!SSL_CTX_set_min_proto_version(ctx, TLS1_3_VERSION)) //we want to use TLS v1.3!
-    {
-        ERR_print_errors_fp(stderr);
-        exit(EXIT_FAILURE);
-    }
-    
-    if (SSL_CTX_use_certificate_file(ctx, "cert.pem", SSL_FILETYPE_PEM) <= 0 ||
-        SSL_CTX_use_PrivateKey_file(ctx, "key.pem", SSL_FILETYPE_PEM) <= 0) {
-        ERR_print_errors_fp(stderr);
-        exit(EXIT_FAILURE);
-    }
-
-    Host* host = new Host();
+    //setup host
+    SSL_CTX* ctx = init_openssl(false, std::string("cert.pem"), std::string("key.pem"));
+    host = new Host();
     bool status = host->initialize(69100, 1000, ctx);
     if(!status)
     {
         std::cerr << "Cannot create host!" << std::endl;
+        delete host;
+        cleanup_openssl(ctx);
+        return -1;
     }
-    while(main_loop_run && host->is_initialized())
+
+    std::thread network_thread(network_worker);
+
+    while(main_loop_run)
     {
-        //send packets and receive packets
-        host->handle_events();
+        //pop events and check if we have handshake established
+        /*HostEvent ev = host->pop_event();
+        while (ev.fd>=0)
+        {
+            switch (ev.ev)
+            {
+            }
+            ev = host->pop_event();
+        }*/
 
-        //ok now process incoming packets & create outgoing packets
+        //do processing of packets
+        HostPacket temp = host->pop_packet();
+        while(temp.fd>=0)
+        {
+            switch(temp.packet->get_type())
+            {
+            case PK_LOGIN:
+            {
+                std::cout << "[+] Login received from " << temp.fd << "!" << std::endl;
+                std::string s;
+                temp.packet->read_string(s);
+                std::cout << s << std::endl;
 
-        //after processing packets delete used packages
+                //check if user exists and then send challenge
+                Packet* packet = new Packet(PK_AUTH_CHALLENGE);
+                packet->append_string("Challenge");
+                host->add_packet(temp.fd, packet);
+                break;
+            }
+            default:
+                break;
+            }
+
+            delete temp.packet;
+            temp = host->pop_packet();
+        }
     }
+
+    network_thread.join();
+
+    //clean up
     delete host;
 
-    SSL_CTX_free(ctx);
-    cleanup_openssl();
+    cleanup_openssl(ctx);
 
     return 0;
 }

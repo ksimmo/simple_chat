@@ -123,12 +123,26 @@ void Host::shutdown()
         this->rw_buffer = nullptr;
     }
 
+    //delete leftover packets
+    while(!this->incomming_packets.empty())
+    {
+        delete this->incomming_packets.front().packet;
+        this->incomming_packets.pop();
+    }
+
+    while(!this->outgoing_packets.empty())
+    {
+        delete this->outgoing_packets.front().packet;
+        this->outgoing_packets.pop();
+    }
+
 }
 
 //////////////////////////////
 void Host::accept_client()
 {
     Peer* peer = new Peer(this->ctx);
+
     StatusType status = this->sock_listen->accept(peer->get_socket());
     if(status==ST_SUCCESS)
     {
@@ -150,6 +164,7 @@ void Host::accept_client()
                 std::cout << "New client connected!" << std::endl;
                 peer->is_connected = true;
                 this->connections.insert(std::make_pair(peer->get_socket()->get_fd(), peer));
+                peer->add_event(PE_CONNECTED);
             }
         }
         else
@@ -184,6 +199,7 @@ void Host::disconnect_client(int fd)
 
 void Host::handle_events(int timeout)
 {
+    //check sockets
     int n_fd = epoll_wait(this->epoll_fd, this->epoll_evs, this->epoll_max_events, timeout);
     if(n_fd==-1)
     {
@@ -196,7 +212,7 @@ void Host::handle_events(int timeout)
     }
     if(n_fd==0)
     {
-        std::cerr << "[+]Epoll timed out!" << std::endl;
+        //std::cerr << "[+]Epoll timed out!" << std::endl;
         return;
     }
     for(int i=0;i<n_fd;i++)
@@ -219,8 +235,33 @@ void Host::handle_events(int timeout)
     //complete packages and remove clients if necessary
     for(auto it=this->connections.begin();it!=this->connections.end();)
     {
+        //collect events
+        PeerEvent ev = it->second->pop_event();
+        while(ev!=PE_NONE)
+        {
+            HostEvent temp;
+            temp.fd = it->first;
+            temp.ev = ev;
+            std::lock_guard<std::mutex> lock(this->mutex); //make sure that events are also thread safe
+            this->events.push(temp);
+            ev = it->second->pop_event();
+        }
+
         //assemble packages
         it->second->buffer_in.parse_packets();
+
+        //put packet into list and forward
+        Packet* packet = it->second->buffer_in.pop_packet();
+        while(packet!=nullptr)
+        {
+            std::lock_guard<std::mutex> lock(this->mutex);
+            HostPacket temp;
+            temp.fd = it->first;
+            temp.packet = packet;
+            this->incomming_packets.push(temp);
+            packet = it->second->buffer_in.pop_packet();
+        }
+
 
         //handle disconnects here
         if(it->second->should_disconnect)
@@ -231,4 +272,48 @@ void Host::handle_events(int timeout)
         else
             it++;
     }
+
+    //distribute outgoing packets
+    std::lock_guard<std::mutex> lock(this->mutex);
+    while(!this->outgoing_packets.empty())
+    {
+        HostPacket host_packet = this->outgoing_packets.front();
+        if(this->connections.find(host_packet.fd)==this->connections.end())
+        {
+            //receiver has already disconnected?
+            delete host_packet.packet;
+        }
+        else
+        {
+            this->connections[host_packet.fd]->buffer_out.add_packet(host_packet.packet);
+        }
+        this->outgoing_packets.pop();
+    }
+}
+
+
+void Host::add_packet(int sender, Packet* packet)
+{
+    std::lock_guard<std::mutex> lock(this->mutex);
+    HostPacket temp;
+    temp.fd = sender;
+    temp.packet = packet;
+    this->outgoing_packets.push(temp);
+}
+
+HostPacket Host::pop_packet()
+{
+    std::lock_guard<std::mutex> lock(this->mutex);
+    if(this->incomming_packets.empty())
+    {
+        HostPacket temp;
+        temp.fd = -1;
+        temp.packet = nullptr;
+        return temp;
+    }
+
+    HostPacket packet = this->incomming_packets.front();
+    this->incomming_packets.pop();
+
+    return packet;
 }
