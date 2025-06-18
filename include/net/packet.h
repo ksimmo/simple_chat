@@ -32,11 +32,12 @@ private:
     std::size_t write_pos = 0;  //the actual write position can only increase!
     std::size_t read_pos = 0; //the actual position for reading
 
-    std::string sender; //currently unused but contains the identifier from the sender
+    int fd = -1;
 public:
-    Packet(unsigned char type, std::size_t length=0);
+    Packet(int fd=-1, unsigned char type=PK_EMPTY, std::size_t length=0);
     ~Packet();
 
+    int get_fd() { return this->fd; }
     unsigned char get_type() { return this->header->type; }
     std::size_t get_length() { return this->header->length; }
     std::size_t get_total_length() { return this->header->length+sizeof(PacketHeader); }
@@ -49,9 +50,11 @@ public:
     template<typename T>
     void append(T t);
     void append_string(std::string s);
+    void append_buffer(void* data, std::size_t length);
     void append_fmt(const char* fmt, ...); //inspired by ENet & Sauerbraten code ...
 
     bool read_string(std::string &s);
+    bool read_raw(void* data, std::size_t length);
     template<typename T>
     bool read(T& t);
 };
@@ -70,7 +73,7 @@ public:
     void add_packet(Packet* packet) { this->packets.push_front(packet); }
     Packet* pop_packet(); //remove packet (ingoing) for processing
 
-    void parse_packets(); //create packets from inout buffer
+    void parse_packets(int fd=-1); //create packets from inout buffer
     int write_packets(char* buffer, int buffer_length); //write packets to buffer (outgoing)
     void clear_packets(); //remove packets
     void clear_buffer();

@@ -3,7 +3,6 @@
 
 #include "socket.h"
 #include "secure_socket.h"
-#include "client.h"
-#include "host.h"
+#include "connector.h"
 
 #endif

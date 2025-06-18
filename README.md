@@ -12,11 +12,12 @@ The server-client communication is based on non-blocking sockets and TLS encrypt
 - [ ] Maybe add MLS or Double Ratchet E2E encryption
 
 ## Server
-The servers main task is to reroute the messages to the corresponding receiver 
+The servers main task is to reroute the messages to the corresponding receiver and make sure 
+that the client is verified. 
 
 ## Usage
 
 Create certificate for server
 ```
 openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes
-```
+``

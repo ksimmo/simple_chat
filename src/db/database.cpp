@@ -26,3 +26,13 @@ void Database::disconnect()
 {
     sqlite3_close(this->db);
 }
+
+int Database::callback(void* unused, int argc, char** argv, char** col_name)
+{
+    return 0;
+}
+
+bool Database::create_table(const char* name)
+{
+    return true;
+}

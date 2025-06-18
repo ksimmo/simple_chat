@@ -2,7 +2,7 @@
 #include "net/packet.h"
 
 //create a new packet with specified length
-Packet::Packet(unsigned char type, std::size_t length)
+Packet::Packet(int fd, unsigned char type, std::size_t length) : fd(fd)
 {
     this->data = new unsigned char[length+sizeof(PacketHeader)];
     this->header = (struct PacketHeader*)this->data;
@@ -65,12 +65,22 @@ void Packet::append(T t)
 //append string
 void Packet::append_string(std::string s)
 {
-    this->resize_if_necessary(s.size()+1); //take care of '\0'
-    std::copy((unsigned char*)s.c_str(), ((unsigned char*)s.c_str())+sizeof(s.size()+1), 
+    std::size_t total_length = s.length()+1;
+    this->resize_if_necessary(total_length); //take care of '\0'
+    std::copy((unsigned char*)s.c_str(), ((unsigned char*)s.c_str())+total_length, 
                 this->data+this->write_pos+sizeof(PacketHeader));
-    this->write_pos += s.size()+1;
+    this->write_pos += total_length;
 }
 
+//write arbitrary bytes to packet
+void Packet::append_buffer(void* data, std::size_t length)
+{
+    this->append(length); //write length to packet
+    this->resize_if_necessary(length); //take care of '\0'
+    std::copy((unsigned char*)data, ((unsigned char*)data)+length, 
+                this->data+this->write_pos+sizeof(PacketHeader));
+    this->write_pos += length;
+}
 
 //append multiple values onto packet (similar to printf)
 void Packet::append_fmt(const char* fmt, ...)
@@ -147,6 +157,8 @@ bool Packet::read_string(std::string& s)
         }
     }
 
+    std::cout << "Length " << length << std::endl;
+
     if(length==0) //we did not find a string
         return false;
 
@@ -156,10 +168,23 @@ bool Packet::read_string(std::string& s)
     return true;
 }
 
+bool Packet::read_raw(void* data, std::size_t length)
+{
+    if((this->read_pos+length)>this->header->length) //ok object is too large we cannot read it
+        return false;
+
+    std::copy(this->data+this->read_pos+sizeof(PacketHeader), 
+                this->data+this->read_pos+sizeof(PacketHeader)+length,
+            (unsigned char*)data);
+    this->read_pos += length;
+
+    return true;
+}
+
 
 
 /////////////////////////////////////////////
-
+//PacketBuffer
 PacketBuffer::PacketBuffer()
 {
 }
@@ -189,7 +214,7 @@ void PacketBuffer::append(char* buffer, int buffer_length)
 }
 
 //extract packets from buffer
-void PacketBuffer::parse_packets()
+void PacketBuffer::parse_packets(int fd)
 {
     //check if we can at least parse the packet header
     std::size_t header_size = sizeof(PacketHeader);
@@ -205,7 +230,7 @@ void PacketBuffer::parse_packets()
             return; //buffer to short -> packet is not fully received yet
         
         //read packet byte by byte
-        Packet* packet = new Packet(header.type, header.length);
+        Packet* packet = new Packet(fd, header.type, header.length);
         for(std::size_t i=0;i<header.length+header_size;i++)
         {
             if(i>=header_size) //Packet header should not be read! because it is already read

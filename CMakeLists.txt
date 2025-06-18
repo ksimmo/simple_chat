@@ -25,13 +25,14 @@ include_directories(${CMAKE_SOURCE_DIR}/include ${OPENSSL_INCLUDE_DIRS} ${SQLITE
 set(NET_SOURCES src/net/socket.cpp
                 src/net/secure_socket.cpp
                 src/net/packet.cpp
-                src/net/peer.cpp )
+                src/net/peer.cpp
+                src/net/connector.cpp )
 
 # Add server executable
-add_executable(server server.cpp src/net/host.cpp ${NET_SOURCES} src/db/database.cpp)
+add_executable(server server.cpp ${NET_SOURCES} src/db/database.cpp)
 
 # Add client executable
-add_executable(client client.cpp src/net/client.cpp ${NET_SOURCES} src/db/database.cpp)
+add_executable(client client.cpp ${NET_SOURCES} src/db/database.cpp)
 
 # Platform-specific settings
 if(WIN32)
