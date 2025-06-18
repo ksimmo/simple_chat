@@ -5,6 +5,7 @@
 #include <QtCore/QCoreApplication>
 #include "net/net.h"
 #include "db/database.h"
+#include "crypto/crypto.h"
 
 bool main_loop_run = true;
 
@@ -25,6 +26,14 @@ int main(int argc, char* argv[])
     std::cout << "Key table exists?:" << status << std::endl;
 
     //if not exists -> create private/public key pair (long term identity key)
+    Key* k = new Key();
+    k->create();
+    std::vector<unsigned char> priv = k->extract_private();
+    std::cout << "Private key: ";
+    for (std::size_t i = 0; i < priv.size(); i++)
+        printf("%02x", priv[i]);
+    std::cout << std::endl;
+    delete k;
 
     //Client* client = new Client();
     //client->initialize("127.0.0.1", 69100, 100, ctx);

@@ -10,7 +10,6 @@ class Database
 {
 private:
     sqlite3* db;
-    int callback(void* unused, int argc, char** argv, char** col_name);
 
 public:
     Database();
@@ -26,6 +25,7 @@ public:
 
     bool run_query(std::string query);
     bool exists_table(std::string name);
+    bool create_table(std::string name);
 };
 
 #endif

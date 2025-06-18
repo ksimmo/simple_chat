@@ -28,11 +28,13 @@ set(NET_SOURCES src/net/socket.cpp
                 src/net/peer.cpp
                 src/net/connector.cpp )
 
+set(CRYPTO_SOURCES src/crypto/key.cpp)
+
 # Add server executable
-add_executable(server server.cpp ${NET_SOURCES} src/db/database.cpp)
+add_executable(server server.cpp ${NET_SOURCES} src/db/database.cpp ${CRYPTO_SOURCES})
 
 # Add client executable
-add_executable(client client.cpp ${NET_SOURCES} src/db/database.cpp)
+add_executable(client client.cpp ${NET_SOURCES} src/db/database.cpp ${CRYPTO_SOURCES})
 
 # Platform-specific settings
 if(WIN32)
