@@ -18,6 +18,8 @@ class Socket
 {
 private:
     int sock = -1;
+    std::string address;
+    int port = -1;
 public:
     Socket();
     Socket(int sock); //create a socket from a socket descriptor
@@ -26,6 +28,9 @@ public:
 
     bool is_valid() { return this->sock>=0; } //check if we have a valid socket
     int get_fd() { return this->sock; }
+    int get_port() { return this->port; }
+    const char* get_address() { return this->address.c_str(); }
+
     void link(int sock) { this->sock = sock; }
     void unlink() { this->sock = -1; } //careful when using this -> prevent closing of socket upon delete
     bool create(int family=AF_INET, int type=SOCK_STREAM, int protocol=0, bool recreate=false);

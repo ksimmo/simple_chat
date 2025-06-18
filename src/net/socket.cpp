@@ -72,13 +72,15 @@ StatusType Socket::connect(std::string host, int port)
     address.sin_port = htons(port);
 
     int result = ::connect(this->sock, (sockaddr*)&address, sizeof(address));
+    this->address = host;
+    this->port = port;
 
     //error handling
     StatusType status = ST_SUCCESS;
     if(result==-1)
     {
         if(errno==EINPROGRESS && !this->is_blocking())
-        status = ST_INPROGRESS;
+            status = ST_INPROGRESS;
         else
         {
             std::cerr << "Cannot connect to " << host << ": " << strerror(errno) << "(" << errno << ") !" << std::endl;
@@ -110,6 +112,8 @@ bool Socket::bind(int port)
     bool status = (result==0);
     if(!status)
         std::cerr << "Cannot bind to port " << port << ": " << strerror(errno) << "(" << errno << ") !" << std::endl;
+    else
+        this->port = port;
 
     return status;
 }
@@ -138,6 +142,13 @@ StatusType Socket::accept(Socket* newsock)
     struct sockaddr_in client;
     socklen_t size = sizeof(client);
     int result = ::accept(this->sock, (sockaddr*)&client, &size);
+
+    this->port = ntohs(client.sin_port);
+    char temp[INET_ADDRSTRLEN];
+    if(inet_ntop(AF_INET, &client.sin_addr, temp, sizeof(temp))!=nullptr)
+        this->address = std::string(temp);
+    else
+        std::cerr << "[-] Cannot query clients ip address: " << strerror(errno) << "(" << errno << ") !" << std::endl;
 
     StatusType status = ST_SUCCESS;
     if(result==-1)

@@ -21,6 +21,8 @@ int main(int argc, char* argv[])
 
     Database* db = new Database();
     db->connect("user.db", SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE); //create if not exists
+    bool status = db->exists_table(std::string("keys"));
+    std::cout << "Key table exists?:" << status << std::endl;
 
     //if not exists -> create private/public key pair (long term identity key)
 
