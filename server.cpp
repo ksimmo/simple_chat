@@ -35,15 +35,10 @@ int main(int argc, char* argv[])
     Key* k = new Key();
     k->create_from_public(k->get_id(), pub.data(), pub.size());
 
-    std::vector<unsigned char> challenge(32);
-    if (RAND_bytes(challenge.data(), 32) != 1) {
-        throw std::runtime_error("Failed to generate random challenge.");
-    }
-
     //initialize database
     Database* db = new Database();
     db->connect("server.db", SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
-    //register user (test)
+    //register user (test) TODO: also save key type
     db->run_query("CREATE TABLE IF NOT EXISTS users (name TEXT NOT NULL UNIQUE, key BLOB NOT NULL, last_login TEXT NOT NULL);", nullptr);
     db->run_query("INSERT INTO users (name, key, last_login) VALUES(?, ?, ?);", "tbt", "TestUser", pub.size(), pub.data(), "never");
 
@@ -75,7 +70,7 @@ int main(int argc, char* argv[])
                 {
                     User* user = new User(std::chrono::system_clock::now());
                     users.insert(std::make_pair(ev.fd, user));
-                    std::cout << "[+] Client " << ev.fd << " is ready" << std::endl;
+                    std::cout << "[+] Client " << ev.fd << " is ready!" << std::endl;
                     break;
                 }
                 case PE_DISCONNECTED:
@@ -84,7 +79,7 @@ int main(int argc, char* argv[])
                     //finalize user
                     delete entry->second;
                     users.erase(entry);
-                    std::cout << "[+] Client " << ev.fd << " disconnected" << std::endl;
+                    std::cout << "[+] Client " << ev.fd << " disconnected!" << std::endl;
                     break;
                 }
             }
@@ -105,29 +100,46 @@ int main(int argc, char* argv[])
                 std::cout << s << std::endl;
 
                 //check if user exists
+                db->run_query("SELECT key from users WHERE name='"+s+"';", nullptr);
+                if(db->values.size()==0) //ok user does not exist! -> disconnect
+                {
 
+                }
+                else
+                {
+                    User* user = users[packet->get_fd()];
+                    user->set_name(s);
 
+                    //extract key
+                    //db->values[0][0]
 
-                //check if user exists and then send challenge
-                Packet* newpacket = new Packet(packet->get_fd(), PK_AUTH_CHALLENGE);
-                //newpacket->append_string("Challenge");
-                newpacket->append_buffer(challenge.data(), challenge.size());
-                connector->add_packet(newpacket);
-                //TODO save timepoint of challenge creation
+                    //check if user exists and then send challenge
+                    Packet* newpacket = new Packet(packet->get_fd(), PK_AUTH_CHALLENGE);
+                    
+                    unsigned char* challenge = user->create_challenge(32);
+                    if(challenge!=nullptr)
+                    {
+                        newpacket->append_buffer(challenge, 32);
+                        connector->add_packet(newpacket);
+                    }
+                    else
+                    {
+                        //disconnect
+                    }
+                }
                 break;
             }
             case PK_AUTH_CHALLENGE:
             {
+                User* user = users[packet->get_fd()];
                 std::cout << "[+] Received signed challenge from " << packet->get_fd() << std::endl;
                 std::size_t length = 0;
                 packet->read(length);
                 std::vector<unsigned char> signed_challenge(length);
                 packet->read_raw(signed_challenge.data(), length);
 
-                bool status = k->verify_signature(challenge, signed_challenge);
+                bool status = user->check_challenge(signed_challenge.data(), signed_challenge.size());
                 std::cout << "[+]Challenge status: " << status << std::endl;
-
-                //TODO: check time since sending of challenge to make sure answer happens fast enough
                 break;
             }
             default:

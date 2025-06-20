@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include "entry.h"
+
 class Database
 {
 private:
@@ -21,7 +23,7 @@ public:
     //data from last query
     std::vector<std::string> column_names;
     std::vector<int> column_datatypes; //datatype
-    std::vector<std::vector<std::string>> values;
+    std::vector<std::vector<DBEntry*>> values;
 
     bool run_query(std::string query, const char* fmt, ...);
     bool exists_table(std::string name);

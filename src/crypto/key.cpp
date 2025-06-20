@@ -138,7 +138,7 @@ bool Key::sign_data(std::vector<unsigned char>& data, std::vector<unsigned char>
 
 }
 
-bool Key::verify_signature(std::vector<unsigned char>& data, std::vector<unsigned char>& signed_data)
+bool Key::verify_signature(unsigned char* data, std::size_t data_length, unsigned char* signed_data, std::size_t signed_data_length)
 {
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
     if(ctx==nullptr)
@@ -155,7 +155,7 @@ bool Key::verify_signature(std::vector<unsigned char>& data, std::vector<unsigne
     }
 
     //verify
-    int result = EVP_DigestVerify(ctx, signed_data.data(), signed_data.size(), data.data(), data.size());
+    int result = EVP_DigestVerify(ctx, signed_data, signed_data_length, data, data_length);
 
     EVP_MD_CTX_free(ctx);
     return (result==1);

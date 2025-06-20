@@ -5,6 +5,7 @@
 
 #include <openssl/evp.h>
 
+//current default is Curve25519, maybe exchange with post quantum protocol later
 class Key
 {
 private:
@@ -26,7 +27,7 @@ public:
     std::vector<unsigned char> extract_public();
 
     bool sign_data(std::vector<unsigned char>& data, std::vector<unsigned char>& signed_data);
-    bool verify_signature(std::vector<unsigned char>& data, std::vector<unsigned char>& signed_data);
+    bool verify_signature(unsigned char* data, std::size_t data_length, unsigned char* signed_data, std::size_t signed_data_length);
 };
 
 #endif

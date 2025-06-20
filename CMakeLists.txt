@@ -30,13 +30,15 @@ set(NET_SOURCES src/net/socket.cpp
 
 set(CRYPTO_SOURCES src/crypto/key.cpp)
 
+set(DB_SOURCES src/db/database.cpp src/db/entry.cpp)
+
 set(SERVER_SOURCES src/server/user.cpp)
 
 # Add server executable
-add_executable(server server.cpp ${NET_SOURCES} src/db/database.cpp ${CRYPTO_SOURCES} ${SERVER_SOURCES})
+add_executable(server server.cpp ${NET_SOURCES} ${DB_SOURCES} ${CRYPTO_SOURCES} ${SERVER_SOURCES})
 
 # Add client executable
-add_executable(client client.cpp ${NET_SOURCES} src/db/database.cpp ${CRYPTO_SOURCES})
+add_executable(client client.cpp ${NET_SOURCES} ${DB_SOURCES}  ${CRYPTO_SOURCES})
 
 qt_add_executable(test test.cpp)
 target_link_libraries(test PRIVATE Qt6::Core Qt6::Widgets)
