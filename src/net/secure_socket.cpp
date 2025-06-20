@@ -55,7 +55,7 @@ SecureSocket::SecureSocket(SSL_CTX* ctx) : Socket()
         this->ssl = SSL_new(ctx);
 }
 
-SecureSocket::SecureSocket(int sock, SSL_CTX* ctx) : Socket(sock)
+SecureSocket::SecureSocket(int fd, SSL_CTX* ctx) : Socket(fd)
 {
     this->ctx = ctx;
     if(ctx!=nullptr)
@@ -83,7 +83,7 @@ StatusType SecureSocket::connect_secure()
         std::cout << "[-]SSL is not available!" << std::endl;
         return ST_FAIL;
     }
-    SSL_set_fd(this->ssl, this->get_fd());
+    SSL_set_fd(this->ssl, this->fd);
     int result = SSL_connect(this->ssl);
 
     StatusType st = ST_SUCCESS;
@@ -114,7 +114,7 @@ StatusType SecureSocket::accept_secure()
         std::cout << "[-]SSL is not available!" << std::endl;
         return ST_FAIL;
     }
-    SSL_set_fd(this->ssl, this->get_fd());
+    SSL_set_fd(this->ssl, this->fd);
     int result = SSL_accept(this->ssl);
 
     StatusType st = ST_SUCCESS;

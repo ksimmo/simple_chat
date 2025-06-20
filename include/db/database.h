@@ -23,7 +23,7 @@ public:
     std::vector<int> column_datatypes; //datatype
     std::vector<std::vector<std::string>> values;
 
-    bool run_query(std::string query);
+    bool run_query(std::string query, const char* fmt, ...);
     bool exists_table(std::string name);
     bool create_table(std::string name);
 };

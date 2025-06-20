@@ -16,11 +16,9 @@ private:
     SSL_CTX* ctx = nullptr;
 public:
     SecureSocket(SSL_CTX* ctx);
-    SecureSocket(int socket, SSL_CTX* ctx);
+    SecureSocket(int fd, SSL_CTX* ctx);
     SecureSocket(int family, int type, int protocol, SSL_CTX* ctx);
     ~SecureSocket();
-
-    SSL* get_ssl() { return this->ssl; }
 
     StatusType connect_secure();
     StatusType accept_secure();

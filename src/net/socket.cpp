@@ -12,18 +12,18 @@
 //constructors
 Socket::Socket()
 {
-    this->sock = -1;
+    this->fd = -1;
 }
 
-Socket::Socket(int sock)
+Socket::Socket(int fd)
 {
-    this->sock = sock;
+    this->fd = fd;
 }
 
 Socket::Socket(int family, int type, int protocol)
 {
-    this->sock = socket(family, type, protocol);
-    if(this->sock<0)
+    this->fd = socket(family, type, protocol);
+    if(this->fd<0)
         std::cerr << "Cannot create socket: " << strerror(errno) << "(" << errno << ") !" << std::endl;
 }
 
@@ -32,7 +32,7 @@ Socket::~Socket()
 {
     if(this->is_valid())
         this->shutdown();
-        close(this->sock);
+        close(this->fd);
 }
 
 bool Socket::create(int family, int type, int protocol, bool recreate)
@@ -42,14 +42,14 @@ bool Socket::create(int family, int type, int protocol, bool recreate)
         if(recreate)
         {
             this->shutdown();
-            close(this->sock);
+            close(this->fd);
         }
         else
             return true;
     }
-    this->sock = socket(family, type, protocol);
+    this->fd = socket(family, type, protocol);
     bool status = true;
-    if(this->sock<0)
+    if(this->fd<0)
     {
         std::cerr << "Cannot create socket: " << strerror(errno) << "(" << errno << ") !" << std::endl;
         status = false;
@@ -71,7 +71,7 @@ StatusType Socket::connect(std::string host, int port)
     inet_pton(AF_INET, host.c_str(), &(address.sin_addr));
     address.sin_port = htons(port);
 
-    int result = ::connect(this->sock, (sockaddr*)&address, sizeof(address));
+    int result = ::connect(this->fd, (sockaddr*)&address, sizeof(address));
     this->address = host;
     this->port = port;
 
@@ -104,9 +104,9 @@ bool Socket::bind(int port)
     address.sin_port = htons(port);
 
     const int y = 1;
-    setsockopt(this->sock, SOL_SOCKET, SO_REUSEADDR, &y, sizeof(int));
+    setsockopt(this->fd, SOL_SOCKET, SO_REUSEADDR, &y, sizeof(int));
 
-    int result = ::bind(this->sock, (sockaddr*)&address, sizeof(address));
+    int result = ::bind(this->fd, (sockaddr*)&address, sizeof(address));
 
     //error handling
     bool status = (result==0);
@@ -125,7 +125,7 @@ bool Socket::listen(int queue_size)
     if(!this->is_valid())
         return false;
 
-    int result = ::listen(this->sock, queue_size);
+    int result = ::listen(this->fd, queue_size);
 
     bool status = (result==0);
     if(!status)
@@ -141,7 +141,7 @@ StatusType Socket::accept(Socket* newsock)
 
     struct sockaddr_in client;
     socklen_t size = sizeof(client);
-    int result = ::accept(this->sock, (sockaddr*)&client, &size);
+    int result = ::accept(this->fd, (sockaddr*)&client, &size);
 
     this->port = ntohs(client.sin_port);
     char temp[INET_ADDRSTRLEN];
@@ -170,7 +170,7 @@ StatusType Socket::accept(Socket* newsock)
 //just wrap read
 int Socket::read(char* buffer, int buffer_length)
 {
-    int result = recv(this->sock, buffer, buffer_length, 0);
+    int result = recv(this->fd, buffer, buffer_length, 0);
     if(result==-1)
     {
         if(errno==EWOULDBLOCK || errno==EAGAIN)
@@ -183,7 +183,7 @@ int Socket::read(char* buffer, int buffer_length)
 //just wrap write
 int Socket::write(char*buffer, int buffer_length)
 {
-    int result = send(this->sock, buffer, buffer_length, 0);
+    int result = send(this->fd, buffer, buffer_length, 0);
     if(result==-1)
     {
         if(errno==EWOULDBLOCK || errno==EAGAIN)
@@ -199,7 +199,7 @@ bool Socket::is_blocking()
     if(!this->is_valid())
         return false;
 
-    int flags = fcntl(this->sock, F_GETFL, 0);
+    int flags = fcntl(this->fd, F_GETFL, 0);
     bool nonblocking = (flags & O_NONBLOCK); //check if non-blocking flag is set
 
     return !nonblocking;
@@ -211,14 +211,14 @@ bool Socket::set_blocking(bool status)
     if(!this->is_valid())
         return false;
 
-    int flags = fcntl(this->sock, F_GETFL, 0); //current flags
+    int flags = fcntl(this->fd, F_GETFL, 0); //current flags
     int result = 0;
     if ((flags & O_NONBLOCK) && status)
         //ok we have a non-blocking and want to set to blocking
-        result = fcntl(this->sock, F_SETFL, flags ^ SOCK_NONBLOCK);
+        result = fcntl(this->fd, F_SETFL, flags ^ SOCK_NONBLOCK);
     else if(!(flags & O_NONBLOCK) && !status)
         //ok we have a blocking socket and want to set it to non-blocking
-        result = fcntl(this->sock, F_SETFL, flags | SOCK_NONBLOCK);
+        result = fcntl(this->fd, F_SETFL, flags | SOCK_NONBLOCK);
     
     bool ret = (result==0);
     if(!ret)
@@ -232,7 +232,7 @@ bool Socket::shutdown(int how)
     if(!this->is_valid())
         return false;
 
-    int result = ::shutdown(this->sock, how);
+    int result = ::shutdown(this->fd, how);
 
     bool status = (result==0);
     if(!status)

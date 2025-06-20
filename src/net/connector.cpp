@@ -58,6 +58,11 @@ void Connector::shutdown()
         delete this->outgoing_packets.front();
         this->outgoing_packets.pop();
     }
+
+    while(!this->events.empty())
+    {
+        this->events.pop();
+    }
 }
 
 bool Connector::initialize(ConnectorType conn_type, std::string address,int port, int maxevents)
@@ -138,7 +143,7 @@ bool Connector::initialize(ConnectorType conn_type, std::string address,int port
     struct epoll_event ev;
     //ERR and HUP are queried by default
     ev.events = this->type==CONN_SERVER ? EPOLLIN : EPOLLIN | EPOLLOUT; //server only needs listen
-    ev.data.fd = this->main_peer->get_socket()->get_fd();
+    ev.data.fd = *this->main_peer->get_socket();
     int result = epoll_ctl(this->epoll_fd, EPOLL_CTL_ADD, ev.data.fd, &ev);
     if(result==-1) 
     {
@@ -169,7 +174,7 @@ void Connector::accept_client()
             //add client to epoll
             struct epoll_event ev;
             ev.events = EPOLLIN | EPOLLOUT | EPOLLERR | EPOLLHUP;
-            ev.data.fd = peer->get_socket()->get_fd();
+            ev.data.fd = *peer->get_socket();
             int result = epoll_ctl(this->epoll_fd, EPOLL_CTL_ADD, ev.data.fd, &ev);
             if(result==-1) 
             {
@@ -178,9 +183,8 @@ void Connector::accept_client()
             }
             else
             {
-                std::cout << "New client connected!" << std::endl;
                 peer->is_connected = true;
-                this->connections.insert(std::make_pair(peer->get_socket()->get_fd(), peer));
+                this->connections.insert(std::make_pair((int)*peer->get_socket(), peer)); //here we need explicit conversion to int!!!
                 peer->add_event(PE_CONNECTED);
             }
         }
@@ -211,7 +215,6 @@ void Connector::disconnect_client(int fd)
     auto entry = this->connections.find(fd);
     delete entry->second;
     entry->second = nullptr;
-    std::cout << "Client disconnected" << std::endl;
 }
 
 ConnectorEvent Connector::pop_event()
@@ -285,7 +288,7 @@ void Connector::step(int timeout)
         }
         else if(this->type==CONN_SERVER)
         {
-            if(this->epoll_evs[i].data.fd==this->main_peer->get_socket()->get_fd()) //our listen socket
+            if(this->epoll_evs[i].data.fd==*this->main_peer->get_socket()) //our listen socket
             {
                 if(this->epoll_evs[i].events & EPOLLIN)
                     this->accept_client();
@@ -314,7 +317,7 @@ void Connector::step(int timeout)
         while(ev!=PE_NONE)
         {
             ConnectorEvent ce;
-            ce.fd = this->main_peer->get_socket()->get_fd();
+            ce.fd = *this->main_peer->get_socket();
             ce.ev = ev;
             std::lock_guard<std::mutex> lock(this->mutex);
             this->events.push(ce);
@@ -322,7 +325,7 @@ void Connector::step(int timeout)
         }
 
         //parse packets
-        this->main_peer->buffer_in.parse_packets(this->main_peer->get_socket()->get_fd()); //we could ignore fd here
+        this->main_peer->buffer_in.parse_packets(*this->main_peer->get_socket()); //we could ignore fd here
         Packet* packet = this->main_peer->buffer_in.pop_packet();
         while(packet!=nullptr)
         {
@@ -355,8 +358,9 @@ void Connector::step(int timeout)
                 ev = it->second->pop_event();
             }
 
+            //TODO: what should we do if client is disconnecting? -> drop or keep packets?
             //assemble packages
-            it->second->buffer_in.parse_packets(it->second->get_socket()->get_fd());
+            it->second->buffer_in.parse_packets(*it->second->get_socket());
 
             //put packet into list and forward
             Packet* packet = it->second->buffer_in.pop_packet();
@@ -371,8 +375,16 @@ void Connector::step(int timeout)
             //handle disconnects here
             if(it->second->should_disconnect)
             {
+                //create disconnect event
+                ConnectorEvent ce_ev;
+                ce_ev.fd = it->first;
+                ce_ev.ev = PE_DISCONNECTED;
+
                 this->disconnect_client(it->first);
                 it = this->connections.erase(it);
+
+                std::lock_guard<std::mutex> lock(this->mutex);
+                this->events.push(ce_ev);
             }
             else
                 it++;

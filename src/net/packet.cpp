@@ -138,7 +138,7 @@ bool Packet::read(T& t)
 
     std::copy(this->data+this->read_pos+sizeof(PacketHeader), 
                 this->data+this->read_pos+sizeof(PacketHeader)+sizeof(t),
-            (unsigned char*)t);
+            (unsigned char*)&t);
     this->read_pos += sizeof(t);
 
     return true;
@@ -181,7 +181,7 @@ bool Packet::read_raw(void* data, std::size_t length)
     return true;
 }
 
-
+template bool Packet::read<std::size_t>(std::size_t&);
 
 /////////////////////////////////////////////
 //PacketBuffer

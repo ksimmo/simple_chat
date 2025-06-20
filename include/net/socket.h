@@ -17,22 +17,26 @@ enum StatusType {ST_FAIL=-1, ST_INPROGRESS=0, ST_SUCCESS=1}; //we mainly need th
 class Socket
 {
 private:
-    int sock = -1;
+    //int fd = -1;
     std::string address;
     int port = -1;
+protected:
+    int fd = -1;
 public:
     Socket();
-    Socket(int sock); //create a socket from a socket descriptor
+    Socket(int fd); //create a socket from a socket descriptor
     Socket(int family, int type, int protocol);
     ~Socket();
 
-    bool is_valid() { return this->sock>=0; } //check if we have a valid socket
-    int get_fd() { return this->sock; }
+    //operators
+    operator int() { return this->fd; }
+
+    bool is_valid() { return this->fd>=0; } //check if we have a valid socket
     int get_port() { return this->port; }
     const char* get_address() { return this->address.c_str(); }
 
-    void link(int sock) { this->sock = sock; }
-    void unlink() { this->sock = -1; } //careful when using this -> prevent closing of socket upon delete
+    void link(int fd) { this->fd = fd; }
+    void unlink() { this->fd = -1; } //careful when using this -> prevent closing of socket upon delete
     bool create(int family=AF_INET, int type=SOCK_STREAM, int protocol=0, bool recreate=false);
 
     bool is_blocking();

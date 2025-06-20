@@ -59,6 +59,8 @@ public:
     bool read(T& t);
 };
 
+extern template bool Packet::read<std::size_t>(std::size_t&);
+
 //a buffer holding unfinished packet bytes and not send packets
 class PacketBuffer
 {

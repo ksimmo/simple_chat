@@ -43,6 +43,7 @@ public:
     ~Connector();
     bool initialize(ConnectorType conn_type, std::string address, int port, int maxevents=100);
     bool is_initialized() { return this->main_peer!=nullptr; }
+    bool should_disconnect() { return this->main_peer->should_disconnect; }
     void shutdown();
 
     void step(int timeout=100);

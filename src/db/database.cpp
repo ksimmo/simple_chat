@@ -27,12 +27,7 @@ void Database::disconnect()
     sqlite3_close(this->db);
 }
 
-int Database::callback(void* unused, int argc, char** argv, char** col_name)
-{
-    return 0;
-}
-
-bool Database::run_query(std::string query)
+bool Database::run_query(std::string query, const char* fmt, ...)
 {
     //clear data from last query
     this->column_names.clear();
@@ -49,10 +44,89 @@ bool Database::run_query(std::string query)
     }
 
     int num_columns = sqlite3_column_count(stmt);
+    int num_binds = sqlite3_bind_parameter_count(stmt);
+
+    for(int i=0;i<num_columns;i++)
+    {
+        std::cout << "Name: " << sqlite3_column_name(stmt,i) << " Type: " << sqlite3_column_type(stmt,i) << std::endl;
+        std::string name = const_cast<const char*>(sqlite3_column_name(stmt,i));
+        this->column_names.push_back(name);
+
+        this->column_datatypes.push_back(sqlite3_column_type(stmt,i));
+    }
+
+    bool status = true;
+
+    //ok if we insert values use bind here
+    if(fmt!=nullptr && num_binds>0)
+    {
+        va_list args;
+        va_start(args, fmt);
+        int index = 1; //leftmost has index of 1
+
+        //TODO: support multi row bind! using vectors, indicate with v at beginning
+        while(*fmt!='\0')
+        {
+            switch (*fmt)
+            {
+            case 'i': //integer
+            {
+                int i = va_arg(args, int);
+                if(sqlite3_bind_int(stmt, index, i)!=SQLITE_OK)
+                {
+                    std::cerr << "Could not bind int: " << sqlite3_errmsg(this->db) << " (" << result << ")!" << std::endl;
+                    status = false;
+                }
+                break;
+            }
+            case 'f': //float
+            case 'd': //double
+            {
+                double d = va_arg(args, double);
+                if(sqlite3_bind_double(stmt, index, d)!=SQLITE_OK)
+                {
+                    std::cerr << "Could not bind double: " << sqlite3_errmsg(this->db) << " (" << result << ")!" << std::endl;
+                    status = false;
+                }
+                break;
+            }
+            case 't': //text
+            {
+                const char* c = va_arg(args, const char*);
+                if(sqlite3_bind_text(stmt, index, c, -1, SQLITE_STATIC)!=SQLITE_OK)
+                {
+                    std::cerr << "Could not bind text: " << sqlite3_errmsg(this->db) << " (" << result << ")!" << std::endl;
+                    status = false;
+                }
+                break;
+            }
+            case 'b': //blob
+            {
+                int length = va_arg(args, int);
+                void* p = va_arg(args, void*);
+                if(sqlite3_bind_blob(stmt, index, p, length, SQLITE_STATIC)!=SQLITE_OK)
+                {
+                    std::cerr << "Could not bind double: " << sqlite3_errmsg(this->db) << " (" << result << ")!" << std::endl;
+                    status = false;
+                }
+                break;
+            }
+            }
+            ++fmt;
+            if(!status)
+                break;
+            index++;
+        }
+        va_end(args);
+    }
+
+    if(!status)
+    {
+        sqlite3_finalize(stmt);
+        return false;
+    }
 
     //step through data
-    bool status = true;
-    bool first_time = true;
     while(true)
     {
         result = sqlite3_step(stmt);
@@ -64,20 +138,11 @@ bool Database::run_query(std::string query)
             temp.reserve(num_columns);
             //we have data -> loop over columns
             for(int i=0;i<num_columns;i++)
-            {
-                if(first_time)
-                {
-                    std::string name = const_cast<const char*>(sqlite3_column_name(stmt,i));
-                    this->column_names.push_back(name);
-
-                    this->column_datatypes.push_back(sqlite3_column_type(stmt,i));
-                }
-                
+            {   
                 std::string text = const_cast<const char*>(sqlite3_column_name(stmt,i));
                 temp.push_back(text);
 
             }
-            first_time = false;
             this->values.push_back(temp);
         }
         else if(result==SQLITE_BUSY)
@@ -102,7 +167,7 @@ bool Database::run_query(std::string query)
 bool Database::exists_table(std::string name)
 {
     std::string query = "SELECT name FROM sqlite_master WHERE type='table' AND name='" + name + "';";
-    bool status = this->run_query(query);
+    bool status = this->run_query(query, nullptr);
     
     if(status)
         //check returned data for sucess

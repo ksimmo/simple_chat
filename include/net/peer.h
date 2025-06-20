@@ -4,6 +4,15 @@
 #include "net/secure_socket.h"
 #include "net/packet.h"
 
+
+
+#ifdef _WIN32 //we are on windows
+#elif __unix__ //we are on unix systems
+#define USE_EPOLL
+#elif __APPLE__
+#define USE_KQUEUE
+#endif
+
 enum PeerEvent {PE_NONE, PE_CONNECTED, PE_HANDSHAKE_FINISHED, PE_DISCONNECTED};
 
 //class handling socket and incoming and outgoing packets

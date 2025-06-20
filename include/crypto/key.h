@@ -24,6 +24,9 @@ public:
 
     std::vector<unsigned char> extract_private();
     std::vector<unsigned char> extract_public();
+
+    bool sign_data(std::vector<unsigned char>& data, std::vector<unsigned char>& signed_data);
+    bool verify_signature(std::vector<unsigned char>& data, std::vector<unsigned char>& signed_data);
 };
 
 #endif
