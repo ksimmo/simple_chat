@@ -98,7 +98,7 @@ StatusType SecureSocket::connect_secure()
                 break;
             default:
                 st = ST_FAIL;
-                std::cerr << "SSL handshake failed: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+                std::cerr << "[-]SSL handshake failed: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
                 break;
         }
     }
@@ -129,7 +129,7 @@ StatusType SecureSocket::accept_secure()
                 break;
             default:
                 st = ST_FAIL;
-                std::cerr << "SSL handshake failed: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+                std::cerr << "[-]SSL handshake failed: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
                 break;
         }
     }

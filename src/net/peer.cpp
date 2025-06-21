@@ -31,16 +31,16 @@ bool Peer::create()
     bool status = this->sock->create();
     if(!status)
     {
-        std::cerr << "[-] Cannot create socket!" << std::endl;
+        std::cerr << "[-]Cannot create socket!" << std::endl;
         return status;
     }
 
     status = this->sock->set_blocking(false);
     if(status)
-        std::cout << "[+] Succesfully set to non-blocking mode!" << std::endl;
+        std::cout << "[+]Succesfully set to non-blocking mode!" << std::endl;
     else
     {
-        std::cerr << "[-] Failed set to non-blocking mode!" << std::endl;
+        std::cerr << "[-]Failed set to non-blocking mode!" << std::endl;
         return status;
     }
 
@@ -55,7 +55,6 @@ void Peer::handle_secure_connect()
         if(st==ST_SUCCESS)
         {
             this->is_ssl_connected = true;
-            std::cout << "SSL established!" << std::endl;
             this->events.push(PE_HANDSHAKE_FINISHED);
         }
         else if(st==ST_FAIL)
@@ -74,7 +73,6 @@ void Peer::handle_secure_accept()
         if(st==ST_SUCCESS)
         {
             this->is_ssl_connected = true;
-            std::cout << "SSL established!" << std::endl;
             this->events.push(PE_HANDSHAKE_FINISHED);
         }
         else if(st==ST_FAIL)
@@ -90,7 +88,7 @@ void Peer::handle_events(uint32_t evs, char* rw_buffer, int buffer_length)
         return;
     if(evs & EPOLLERR || evs & EPOLLHUP)
     {
-        std::cerr << "[-] Client closed connection!" << std::endl;
+        std::cerr << "[-]Client closed connection!" << std::endl;
         this->should_disconnect = true;
         return;
     }

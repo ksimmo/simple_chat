@@ -48,6 +48,8 @@ public:
 
     void step(int timeout=100);
 
+    void initiate_clean_disconnect(int fd);
+
     ConnectorEvent pop_event();
     void add_packet(Packet* packet);
     Packet* pop_packet();

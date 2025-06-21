@@ -27,7 +27,6 @@ void Database::disconnect()
     sqlite3_close(this->db);
 
     this->column_names.clear();
-    this->column_datatypes.clear();
     for(auto i=0;i<this->values.size();i++)
     {
         for(auto j=0;j<this->values[i].size();j++)
@@ -40,7 +39,6 @@ bool Database::run_query(std::string query, const char* fmt, ...)
 {
     //clear data from last query
     this->column_names.clear();
-    this->column_datatypes.clear();
     for(auto i=0;i<this->values.size();i++)
     {
         for(auto j=0;j<this->values[i].size();j++)
@@ -65,8 +63,6 @@ bool Database::run_query(std::string query, const char* fmt, ...)
         //std::cout << "Name: " << sqlite3_column_name(stmt,i) << " Type: " << sqlite3_column_type(stmt,i) << std::endl;
         std::string name = const_cast<const char*>(sqlite3_column_name(stmt,i));
         this->column_names.push_back(name);
-
-        this->column_datatypes.push_back(sqlite3_column_type(stmt,i));
     }
 
     bool status = true;
@@ -120,7 +116,7 @@ bool Database::run_query(std::string query, const char* fmt, ...)
                 void* p = va_arg(args, void*);
                 if(sqlite3_bind_blob(stmt, index, p, length, SQLITE_STATIC)!=SQLITE_OK)
                 {
-                    std::cerr << "Could not bind double: " << sqlite3_errmsg(this->db) << " (" << result << ")!" << std::endl;
+                    std::cerr << "Could not bind blob: " << sqlite3_errmsg(this->db) << " (" << result << ")!" << std::endl;
                     status = false;
                 }
                 break;
@@ -154,32 +150,33 @@ bool Database::run_query(std::string query, const char* fmt, ...)
             for(int i=0;i<num_columns;i++)
             {
                 DBEntry* entry;
-                switch(this->column_datatypes[i])
+                int dtype = sqlite3_column_type(stmt, i);
+                switch(dtype)
                 {
                 case SQLITE_INTEGER:
                 {
                     int a = sqlite3_column_int(stmt, i);
-                    entry = new DBEntry(this->column_datatypes[i], &a);
+                    entry = new DBEntry(dtype, &a);
                     break;
                 }
                 case SQLITE_FLOAT:
                 {
                     double d = sqlite3_column_double(stmt, i);
-                    entry = new DBEntry(this->column_datatypes[i], &d);
+                    entry = new DBEntry(dtype, &d);
                     break;
                 } 
                 case SQLITE_TEXT:
                 {
                     int size = sqlite3_column_bytes(stmt, i);
                     const unsigned char* s = sqlite3_column_text(stmt, i);
-                    entry = new DBEntry(this->column_datatypes[i], s, size);
+                    entry = new DBEntry(dtype, s, size);
                     break;
                 }
                 case SQLITE_BLOB:
                 {
                     int size = sqlite3_column_bytes(stmt, i);
                     const void* blob = sqlite3_column_blob(stmt, i);
-                    entry = new DBEntry(this->column_datatypes[i], blob, size);
+                    entry = new DBEntry(dtype, blob, size);
                     break;
                 }
                 default:
@@ -190,7 +187,6 @@ bool Database::run_query(std::string query, const char* fmt, ...)
                 }  
                 }   
                 temp.push_back(entry);
-
             }
             this->values.push_back(temp);
         }

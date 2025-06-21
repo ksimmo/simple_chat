@@ -23,8 +23,10 @@ int main(int argc, char* argv[])
     //if not exists -> create private/public key pair (long term identity key)
     Key* k = new Key();
     k->create();
-    std::vector<unsigned char> priv = k->extract_private();
-    std::vector<unsigned char> pub = k->extract_public();
+    std::vector<unsigned char> priv;
+    std::vector<unsigned char> pub;
+    k->extract_private(priv);
+    k->extract_public(pub);
     std::string s1 = "";
     std::string s2 = "";
     for (std::size_t i = 0; i < priv.size(); i++)
@@ -35,17 +37,14 @@ int main(int argc, char* argv[])
     }
     std::cout << s1 << std::endl;
     std::cout << s2 << std::endl;
-    //delete k;
 
     priv = {238,86,202,231,84,24,213,231,248,202,216,220,193,41,139,180,92,242,29,113,238,233,125,141,62,121,163,208,85,209,27,123};
     pub = {71,130,169,175,37,119,84,77,211,33,86,176,125,7,109,171,150,179,34,32,59,161,196,197,178,90,96,18,20,246,14,211};
-    //k = new Key();
-    k->create_from_private(k->get_id(), priv.data(), priv.size());
 
     Database* db = new Database();
     db->connect("user.db", SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE); //create if not exists
     db->run_query("CREATE TABLE IF NOT EXISTS keys (type TEXT NOT NULL, id INTEGER, key BLOB NOT NULL, date TEXT);", nullptr);
-    db->run_query("INSERT INTO keys (type, id, key, date) VALUES(?, ?, ?);", "tibt", "TestUser", priv.size(), priv.data(), "-");
+    //db->run_query("INSERT INTO keys (type, id, key, date) VALUES(?, ?, ?);", "tibt", "TestUser", priv.size(), priv.data(), "-");
 
     //Client* client = new Client();
     //client->initialize("127.0.0.1", 69100, 100, ctx);
@@ -86,22 +85,31 @@ int main(int argc, char* argv[])
         {
             switch(packet->get_type())
             {
-                case PK_AUTH_CHALLENGE:
+                case PK_ERROR:
+                {
+                    std::string s;
+                    packet->read_string(s);
+                    std::cout << "[-]Received error: " << s << std::endl;
+                    break;
+                }
+                case PK_LOGIN_CHALLENGE:
                 {
                     std::cout << "[+]Received Challenge!" << std::endl;
-                    std::size_t length = 0;
-                    packet->read(length);
-                    std::vector<unsigned char> challenge(length);
-                    packet->read_raw(challenge.data(), length);
+                    std::vector<unsigned char> challenge;
+                    bool status = packet->read_buffer(challenge);
 
                     //sign challenge
-                    std::vector<unsigned char> signed_data;
-                    bool status = k->sign_data(challenge, signed_data);
-                    std::cout << "Challenge signed " << signed_data.size() << std::endl;
+                    Key* kk = new Key();
+                    kk->create_from_private(EVP_PKEY_ED25519, priv);
 
-                    Packet* newpacket = new Packet(-1, PK_AUTH_CHALLENGE);
-                    newpacket->append_buffer(signed_data.data(), signed_data.size());
+                    std::vector<unsigned char> signed_data;
+                    status = kk->sign_data(challenge, signed_data);
+
+                    Packet* newpacket = new Packet(-1, PK_LOGIN_CHALLENGE);
+                    newpacket->append_buffer(signed_data);
                     connector->add_packet(newpacket);
+
+                    delete kk;
 
                     break;
                 }
@@ -114,7 +122,7 @@ int main(int argc, char* argv[])
     delete connector;
     delete db;
 
-    delete k;
+     delete k;
 
     cleanup_openssl(ctx);
 

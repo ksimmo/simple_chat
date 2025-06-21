@@ -14,11 +14,10 @@ private:
     std::string name;
     std::chrono::time_point<std::chrono::system_clock> time_conn;
 
-    Key* verify_key = nullptr;
+    Key* key_verify = nullptr;
 
     std::chrono::time_point<std::chrono::system_clock> time_challenge;
-    unsigned char* challenge = nullptr;
-    std::size_t challenge_size = 0;
+    std::vector<unsigned char> challenge;
 public:
     User(std::chrono::time_point<std::chrono::system_clock> time_conn);
     ~User();
@@ -27,10 +26,12 @@ public:
     std::string get_name() { return this->name; }
     void set_name(std::string& s) { this->name = s; }
 
-    unsigned char* create_challenge(std::size_t length);
-    unsigned char* get_challenge() { return this->challenge; }
-    std::size_t get_challenge_size() { return this->challenge_size; }
-    bool check_challenge(unsigned char* signed_data, std::size_t length, int64_t maxdiff=5000);
+    void set_key(int key, std::vector<unsigned char>& data);
+
+    std::vector<unsigned char>& create_challenge(std::size_t length);
+    std::vector<unsigned char>& get_challenge() { return this->challenge; }
+    std::size_t get_challenge_size() { return this->challenge.size(); }
+    bool check_challenge(std::vector<unsigned char>& signed_challenge, int64_t maxdiff=5000);
 };
 
 #endif

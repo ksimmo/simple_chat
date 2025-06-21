@@ -40,56 +40,67 @@ bool Key::create(int id)
     return true;
 }
 
-bool Key::create_from_private(int id, const unsigned char* bytes, std::size_t length)
+bool Key::create_from_private(int id, std::vector<unsigned char>& data)
 {
     if(this->key!=nullptr)
         EVP_PKEY_free(this->key);
+
     this->id = id;
     this->is_public = false;
-    this->key = EVP_PKEY_new_raw_private_key(id, nullptr, bytes, length);
+    this->key = EVP_PKEY_new_raw_private_key(id, nullptr, data.data(), data.size());
     if(this->key==nullptr)
         std::cerr << "[-] Cannot create private key: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
     return this->key==nullptr ? false : true;
 }
 
-bool Key::create_from_public(int id, const unsigned char* bytes, std::size_t length)
+bool Key::create_from_public(int id, std::vector<unsigned char>& data)
 {
     if(this->key!=nullptr)
         EVP_PKEY_free(this->key);
     this->id = id;
     this->is_public = true;
-    this->key = EVP_PKEY_new_raw_public_key(id, nullptr, bytes, length);
+    this->key = EVP_PKEY_new_raw_public_key(id, nullptr, data.data(), data.size());
+    if(this->key==nullptr)
+        std::cerr << "[-] Cannot create public key: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
     return this->key==nullptr ? false : true;
 }
 
-std::vector<unsigned char> Key::extract_private()
+bool Key::extract_private(std::vector<unsigned char>& data)
 {
-    unsigned char* buffer = new unsigned char[512];
-    std::size_t length = 512;
-    if(EVP_PKEY_get_raw_private_key(this->key, buffer, &length)<=0)
+    std::size_t length = 0;
+    if(EVP_PKEY_get_raw_private_key(this->key, nullptr, &length)!=1)
+    {
+        std::cerr << "[-] Failed getting private key length: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+        return false;
+    } 
+
+    data.resize(length);
+    if(EVP_PKEY_get_raw_private_key(this->key, data.data(), &length)!=1)
     {
         std::cerr << "[-] Failed getting private key: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
-        return std::vector<unsigned char>();
+        return false;
     } 
-    std::vector<unsigned char> bytes(buffer, buffer+length);
-    delete[] buffer;
 
-    return bytes;
+    return true;
 }
 
-std::vector<unsigned char> Key::extract_public()
+bool Key::extract_public(std::vector<unsigned char>& data)
 {
-    unsigned char* buffer = new unsigned char[512];
-    std::size_t length = 512;
-    if(EVP_PKEY_get_raw_public_key(this->key, buffer, &length)<=0)
+    std::size_t length = 0;
+    if(EVP_PKEY_get_raw_public_key(this->key, nullptr, &length)!=1)
+    {
+        std::cerr << "[-] Failed getting public key length: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+        return false;
+    } 
+
+    data.resize(length);
+    if(EVP_PKEY_get_raw_public_key(this->key, data.data(), &length)!=1)
     {
         std::cerr << "[-] Failed getting public key: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
-        return std::vector<unsigned char>();
+        return false;
     } 
-    std::vector<unsigned char> bytes(buffer, buffer+length);
-    delete[] buffer;
 
-    return bytes;
+    return true;
 }
 
 ///////////////////////////////////
@@ -119,26 +130,20 @@ bool Key::sign_data(std::vector<unsigned char>& data, std::vector<unsigned char>
     }
 
     //sign
-    unsigned char* buffer = new unsigned char[length];
-    if(EVP_DigestSign(ctx, buffer, &length, data.data(), data.size()) <= 0)
+    signed_data.resize(length);
+    if(EVP_DigestSign(ctx, signed_data.data(), &length, data.data(), data.size()) <= 0)
     {
         std::cerr << "[-] Failed sign: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
-        delete[] buffer;
         EVP_MD_CTX_free(ctx);
         return false;
     }
-
-    for(int i=0;i<length;i++)
-        signed_data.push_back(buffer[i]);
-    
-    delete[] buffer;
 
     EVP_MD_CTX_free(ctx);
     return true;
 
 }
 
-bool Key::verify_signature(unsigned char* data, std::size_t data_length, unsigned char* signed_data, std::size_t signed_data_length)
+bool Key::verify_signature(std::vector<unsigned char>& data, std::vector<unsigned char>& signed_data)
 {
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
     if(ctx==nullptr)
@@ -155,7 +160,9 @@ bool Key::verify_signature(unsigned char* data, std::size_t data_length, unsigne
     }
 
     //verify
-    int result = EVP_DigestVerify(ctx, signed_data, signed_data_length, data, data_length);
+    int result = EVP_DigestVerify(ctx, signed_data.data(), signed_data.size(), data.data(), data.size());
+    if(result<0)
+        std::cerr << "[-] Failed verify: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
 
     EVP_MD_CTX_free(ctx);
     return (result==1);

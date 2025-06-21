@@ -8,10 +8,10 @@
 #include <cstdarg>
 
 enum PacketType {PK_EMPTY,          //Empty
+                PK_ERROR,           //An error happened
+                PK_DISCONNECT,      //client will be disconnected
                 PK_LOGIN,           //Send by client initiates verification
-                PK_AUTH_CHALLENGE,  //Authentification challenge
-                PK_AUTH_STATUS,     //Authentification status 
-                PK_AUTH_ADD,        //Authentification add new public key
+                PK_LOGIN_CHALLENGE,  //Authentification challenge
                 PK_ONLINE,          //Check if user is online
                 PK_MSG              //A message packet between users
     };
@@ -51,10 +51,12 @@ public:
     void append(T t);
     void append_string(std::string s);
     void append_buffer(void* data, std::size_t length);
+    void append_buffer(std::vector<unsigned char>& data);
     void append_fmt(const char* fmt, ...); //inspired by ENet & Sauerbraten code ...
 
     bool read_string(std::string &s);
     bool read_raw(void* data, std::size_t length);
+    bool read_buffer(std::vector<unsigned char>& data);
     template<typename T>
     bool read(T& t);
 };
@@ -74,6 +76,7 @@ public:
     void append(char* buffer, int buffer_length);
     void add_packet(Packet* packet) { this->packets.push_front(packet); }
     Packet* pop_packet(); //remove packet (ingoing) for processing
+    std::size_t num_packets() { return this->packets.size(); }
 
     void parse_packets(int fd=-1); //create packets from inout buffer
     int write_packets(char* buffer, int buffer_length); //write packets to buffer (outgoing)

@@ -33,7 +33,8 @@ public:
     PacketBuffer buffer_out;
     bool is_connected = false;
     bool is_ssl_connected = false;
-    bool should_disconnect = false;
+    bool should_disconnect = false; //should disconnect
+    bool should_disconnect_clean = false; //should disconnect but only when all outgoing packets are send!
 
     SecureSocket* get_socket() { return this->sock; }
     bool create();

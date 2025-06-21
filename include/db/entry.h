@@ -2,6 +2,7 @@
 #define DB_ENTRY_H
 
 #include <cstddef>
+#include <vector>
 #include <sqlite3.h>
 
 class DBEntry
@@ -14,8 +15,9 @@ public:
     DBEntry(int type, const void* data=nullptr, std::size_t length=0);
     ~DBEntry();
 
+    int get_type() { return this->type; }
     std::size_t get_length() { return this->length; }
-    const void* get_data() { return this->buffer; }
+    unsigned char* get_data() { return this->buffer; }
 };
 
 #endif

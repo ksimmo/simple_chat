@@ -82,6 +82,15 @@ void Packet::append_buffer(void* data, std::size_t length)
     this->write_pos += length;
 }
 
+void Packet::append_buffer(std::vector<unsigned char>& data)
+{
+    this->append(data.size());
+    this->resize_if_necessary(data.size());
+    std::copy(data.data(), data.data()+data.size(), 
+                this->data+this->write_pos+sizeof(PacketHeader));
+    this->write_pos += data.size();
+}
+
 //append multiple values onto packet (similar to printf)
 void Packet::append_fmt(const char* fmt, ...)
 {
@@ -157,8 +166,6 @@ bool Packet::read_string(std::string& s)
         }
     }
 
-    std::cout << "Length " << length << std::endl;
-
     if(length==0) //we did not find a string
         return false;
 
@@ -181,6 +188,19 @@ bool Packet::read_raw(void* data, std::size_t length)
     return true;
 }
 
+bool Packet::read_buffer(std::vector<unsigned char>& data)
+{
+    std::size_t length;
+    bool status = this->read(length);
+    if(!status)
+        return false;
+
+    data.resize(length);
+    status = this->read_raw(data.data(), length);
+    return status;
+}
+
+//register templates
 template bool Packet::read<std::size_t>(std::size_t&);
 
 /////////////////////////////////////////////

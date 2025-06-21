@@ -217,6 +217,13 @@ void Connector::disconnect_client(int fd)
     entry->second = nullptr;
 }
 
+void Connector::initiate_clean_disconnect(int fd)
+{
+    auto p = this->connections.find(fd);
+    if(p!=this->connections.end())
+        p->second->should_disconnect_clean = true;
+}
+
 ConnectorEvent Connector::pop_event()
 {
     std::lock_guard<std::mutex> lock(this->mutex);
@@ -392,19 +399,32 @@ void Connector::step(int timeout)
     }
 
     //distribute outgoing packets
-    std::lock_guard<std::mutex> lock(this->mutex);
-    while(!this->outgoing_packets.empty())
     {
-        Packet* packet = this->outgoing_packets.front();
-        if(this->connections.find(packet->get_fd())==this->connections.end())
+        std::lock_guard<std::mutex> lock(this->mutex);
+        while(!this->outgoing_packets.empty())
         {
-            //receiver has already disconnected does not exist? -> remove package
-            delete packet;
+            Packet* packet = this->outgoing_packets.front();
+            if(this->connections.find(packet->get_fd())==this->connections.end())
+            {
+                //receiver has already disconnected does not exist? -> remove package
+                delete packet;
+            }
+            else
+            {
+                this->connections[packet->get_fd()]->buffer_out.add_packet(packet);
+            }
+            this->outgoing_packets.pop();
         }
-        else
-        {
-            this->connections[packet->get_fd()]->buffer_out.add_packet(packet);
-        }
-        this->outgoing_packets.pop();
     }
+
+    /*
+    if(this->type==CONN_SERVER)
+    {
+        for(auto it=this->connections.begin();it!=this->connections.end();)
+        {
+            if(it->second->should_disconnect && it->second->buffer_out.num_packets()==0)
+                it->second->should_disconnect = true;
+        }
+    }
+    */
 }

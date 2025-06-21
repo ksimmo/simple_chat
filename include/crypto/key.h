@@ -20,14 +20,14 @@ public:
     bool is_public_only() { return this->is_public; }
 
     bool create(int id=EVP_PKEY_ED25519);
-    bool create_from_private(int id, const unsigned char* bytes, std::size_t length);
-    bool create_from_public(int id, const unsigned char* bytes, std::size_t length);
+    bool create_from_private(int id, std::vector<unsigned char>& data);
+    bool create_from_public(int id, std::vector<unsigned char>& data);
 
-    std::vector<unsigned char> extract_private();
-    std::vector<unsigned char> extract_public();
+    bool extract_private(std::vector<unsigned char>& data);
+    bool extract_public(std::vector<unsigned char>& data);
 
     bool sign_data(std::vector<unsigned char>& data, std::vector<unsigned char>& signed_data);
-    bool verify_signature(unsigned char* data, std::size_t data_length, unsigned char* signed_data, std::size_t signed_data_length);
+    bool verify_signature(std::vector<unsigned char>& data, std::vector<unsigned char>& signed_data);
 };
 
 #endif
