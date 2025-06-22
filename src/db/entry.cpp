@@ -26,3 +26,8 @@ DBEntry::~DBEntry()
     if(this->buffer!=nullptr)
         delete[] this->buffer;
 }
+
+void DBEntry::get_string(std::string& s)
+{
+    s.insert(s.begin(), (char*)this->buffer, (char*)this->buffer+this->length);
+}

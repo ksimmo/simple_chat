@@ -29,7 +29,7 @@ void network_worker()
 
 void disconnect_user(int fd)
 {
-    //connector->initiate_clean_disconnect(fd);
+    connector->initiate_clean_disconnect(fd);
 }
 
 int main(int argc, char* argv[])
@@ -43,8 +43,8 @@ int main(int argc, char* argv[])
     Database* db = new Database();
     db->connect("server.db", SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
     //register user (test)
-    db->run_query("CREATE TABLE IF NOT EXISTS users (name TEXT NOT NULL UNIQUE, key BLOB NOT NULL, key_type INTEGER NOT NULL, last_login TEXT NOT NULL);", nullptr);
-    db->run_query("INSERT INTO users (name, key, key_type, last_login) VALUES(?, ?, ?, ?);", "tbit", "TestUser", pub.size(), pub.data(), EVP_PKEY_ED25519, "never");
+    db->run_query("CREATE TABLE IF NOT EXISTS users (name TEXT NOT NULL UNIQUE, key BLOB NOT NULL, key_type TEXT NOT NULL, last_login TEXT NOT NULL);", nullptr);
+    db->run_query("INSERT INTO users (name, key, key_type, last_login) VALUES(?, ?, ?, ?);", "tbtt", "TestUser", pub.size(), pub.data(), "ED25519", "never");
 
     //setup host
     SSL_CTX* ctx = init_openssl(false, std::string("cert.pem"), std::string("key.pem"));
@@ -59,7 +59,8 @@ int main(int argc, char* argv[])
     }
 
     //create users to store information
-    std::unordered_map<int, User*> users;
+    std::unordered_map<int, User*> users; //link user to socket fd
+    //std::unordered_map<std::string, User*user>; //link user to name
 
     std::thread network_thread(network_worker);
     while(main_loop_run && connector->is_initialized())
@@ -72,7 +73,7 @@ int main(int argc, char* argv[])
             {
                 case PE_HANDSHAKE_FINISHED:
                 {
-                    User* user = new User(std::chrono::system_clock::now());
+                    User* user = new User(ev.fd, std::chrono::system_clock::now());
                     users.insert(std::make_pair(ev.fd, user));
                     std::cout << "[+]Client " << ev.fd << " is ready!" << std::endl;
                     break;
@@ -84,6 +85,11 @@ int main(int argc, char* argv[])
                     delete entry->second;
                     users.erase(entry);
                     std::cout << "[+]Client " << ev.fd << " disconnected!" << std::endl;
+                    break;
+                }
+                case PE_AUTHENTICATED:
+                {
+                    std::cout << "[+]Checking if " << ev.fd << " has undelivered messages!" << std::endl;
                     break;
                 }
             }
@@ -122,12 +128,16 @@ int main(int argc, char* argv[])
                     std::vector<unsigned char> data;
                     data.resize(db->values[0][0]->get_length());
                     std::copy(db->values[0][0]->get_data(), db->values[0][0]->get_data()+data.size(), data.data());
-                    user->set_key(*((int*)db->values[0][1]->get_data()), data);
+                    
+                    std::string name; //extract key_type
+                    db->values[0][1]->get_string(name);
+                    user->set_key(name, data);
 
                     //check if user exists and then send challenge
-                    std::vector<unsigned char> challenge = user->create_challenge(32);
-                    if(challenge.size()==32)
+                    bool status = user->create_challenge(32);
+                    if(status)
                     {
+                        std::vector<unsigned char> challenge = user->get_challenge();
                         Packet* newpacket = new Packet(packet->get_fd(), PK_LOGIN_CHALLENGE);
                         newpacket->append_buffer(challenge);
                         connector->add_packet(newpacket);
@@ -135,6 +145,12 @@ int main(int argc, char* argv[])
                     else
                     {
                         //disconnect
+                        Packet* newpacket = new Packet(packet->get_fd(), PK_ERROR);
+                        newpacket->append_string("Server error!");
+                        connector->add_packet(newpacket);
+                        disconnect_user(packet->get_fd());
+
+                        //TODO: fatal error we should close the server
                     }
                 }
                 break;
@@ -148,6 +164,22 @@ int main(int argc, char* argv[])
 
                 status = user->check_challenge(signed_challenge);
                 std::cout << "[+]Challenge status: " << status << std::endl;
+                if(!status)
+                {
+                    Packet* newpacket = new Packet(packet->get_fd(), PK_ERROR);
+                    newpacket->append_string("Authentification failed!");
+                    connector->add_packet(newpacket);
+                    //disconnect
+                    disconnect_user(packet->get_fd());
+                }
+                else
+                {
+                    //ok nice client is successfully authenticated
+                    user->set_verified();
+                    connector->add_event(packet->get_fd(), PE_AUTHENTICATED);
+                    Packet* newpacket = new Packet(packet->get_fd(), PK_LOGIN_SUCCESSFULL);
+                    connector->add_packet(newpacket);
+                }
                 break;
             }
             default:

@@ -7,13 +7,13 @@
 
 #include <cstdarg>
 
-enum PacketType {PK_EMPTY,          //Empty
-                PK_ERROR,           //An error happened
-                PK_DISCONNECT,      //client will be disconnected
-                PK_LOGIN,           //Send by client initiates verification
-                PK_LOGIN_CHALLENGE,  //Authentification challenge
-                PK_ONLINE,          //Check if user is online
-                PK_MSG              //A message packet between users
+enum PacketType {PK_EMPTY,              //Empty
+                PK_ERROR,               //An error happened
+                PK_LOGIN,               //Send by client initiates verification
+                PK_LOGIN_CHALLENGE,     //Authentification challenge
+                PK_LOGIN_SUCCESSFULL,   //Authentification was succesfull
+                PK_USER_STATUS,         //Check if user is online
+                PK_MSG                  //A message packet between users
     };
 
 #pragma pack(push, 1) //make sure that the header is the same on all architectures and no padding occurs

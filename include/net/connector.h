@@ -50,6 +50,7 @@ public:
 
     void initiate_clean_disconnect(int fd);
 
+    void add_event(int fd, PeerEvent ev);
     ConnectorEvent pop_event();
     void add_packet(Packet* packet);
     Packet* pop_packet();

@@ -94,7 +94,7 @@ void Peer::handle_events(uint32_t evs, char* rw_buffer, int buffer_length)
     }
 
     //we can read
-    if(evs & EPOLLIN)
+    if(evs & EPOLLIN && !this->should_disconnect_clean) //only read if we should not disconnect
     {
         if((this->is_ssl_connected && this->ctx!=nullptr) ||
             (!this->is_ssl_connected && this->ctx==nullptr))

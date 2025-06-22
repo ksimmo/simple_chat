@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <vector>
+#include <string>
 #include <sqlite3.h>
 
 class DBEntry
@@ -18,6 +19,7 @@ public:
     int get_type() { return this->type; }
     std::size_t get_length() { return this->length; }
     unsigned char* get_data() { return this->buffer; }
+    void get_string(std::string& s);
 };
 
 #endif

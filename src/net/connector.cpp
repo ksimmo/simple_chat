@@ -219,9 +219,20 @@ void Connector::disconnect_client(int fd)
 
 void Connector::initiate_clean_disconnect(int fd)
 {
+    std::lock_guard<std::mutex> lock(this->mutex);
     auto p = this->connections.find(fd);
     if(p!=this->connections.end())
         p->second->should_disconnect_clean = true;
+}
+
+
+void Connector::add_event(int fd, PeerEvent ev)
+{
+    std::lock_guard<std::mutex> lock(this->mutex);
+    ConnectorEvent ce_ev;
+    ce_ev.fd = fd;
+    ce_ev.ev = ev;
+    this->events.push(ce_ev);
 }
 
 ConnectorEvent Connector::pop_event()
@@ -417,14 +428,13 @@ void Connector::step(int timeout)
         }
     }
 
-    /*
     if(this->type==CONN_SERVER)
     {
-        for(auto it=this->connections.begin();it!=this->connections.end();)
+        //check if we should cleanly disconnect a client
+        for(auto it=this->connections.begin();it!=this->connections.end();it++)
         {
-            if(it->second->should_disconnect && it->second->buffer_out.num_packets()==0)
+            if(it->second->should_disconnect_clean && it->second->buffer_out.num_packets()==0)
                 it->second->should_disconnect = true;
         }
     }
-    */
 }

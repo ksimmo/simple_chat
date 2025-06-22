@@ -4,7 +4,7 @@
 
 #include "server/user.h"
 
-User::User(std::chrono::time_point<std::chrono::system_clock> conn_time) : time_conn(conn_time)
+User::User(int fd, std::chrono::time_point<std::chrono::system_clock> conn_time) : fd(fd), time_conn(conn_time)
 {
 }
 
@@ -14,26 +14,28 @@ User::~User()
         delete this->key_verify;
 }
 
-void User::set_key(int type, std::vector<unsigned char>& data)
+void User::set_key(std::string& name, std::vector<unsigned char>& data)
 {
     this->key_verify = new Key();
-    if(!this->key_verify->create_from_public(type, data))
+    if(!this->key_verify->create_from_public(name, data))
     {
         delete this->key_verify;
         this->key_verify = nullptr;
     }
 }
 
-std::vector<unsigned char>& User::create_challenge(std::size_t length)
+bool User::create_challenge(std::size_t length)
 {
+    bool status = true;
     this->challenge.resize(length);
     if (RAND_bytes(this->challenge.data(), length) != 1) {
         std::cerr << "[-]Cannot create random challenge: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+        status = false;
     }
     
     this->time_challenge = std::chrono::system_clock::now();
 
-    return this->challenge;
+    return status;
 }
 
 bool User::check_challenge(std::vector<unsigned char>& signed_challenge, int64_t maxdiff)

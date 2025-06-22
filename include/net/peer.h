@@ -13,7 +13,7 @@
 #define USE_KQUEUE
 #endif
 
-enum PeerEvent {PE_NONE, PE_CONNECTED, PE_HANDSHAKE_FINISHED, PE_DISCONNECTED};
+enum PeerEvent {PE_NONE, PE_CONNECTED, PE_DISCONNECTED, PE_HANDSHAKE_FINISHED, PE_AUTHENTICATED};
 
 //class handling socket and incoming and outgoing packets
 class Peer
