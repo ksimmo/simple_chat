@@ -63,7 +63,7 @@ int main(int argc, char* argv[])
 
     //create users to store information
     std::unordered_map<int, User*> users; //link user to socket fd
-    //std::unordered_map<std::string, User*user>; //link user to name
+    std::unordered_map<std::string, User*> active_names; //link user to name
 
     std::thread network_thread(network_worker);
     while(main_loop_run && connector->is_initialized())
@@ -84,6 +84,15 @@ int main(int argc, char* argv[])
                 case PE_DISCONNECTED:
                 {
                     auto entry = users.find(ev.fd);
+
+                    //check if user was logged in
+                    if(entry->second->is_verified())
+                    {
+                        //ok also remove from active names
+                        auto entry2 = active_names.find(entry->second->get_name());
+                        if(entry2!=active_names.end())
+                            active_names.erase(entry2);
+                    }
                     //finalize user
                     delete entry->second;
                     users.erase(entry);
@@ -156,6 +165,7 @@ int main(int argc, char* argv[])
                         disconnect_user(packet->get_fd());
 
                         //TODO: fatal error we should close the server
+                        connector->shutdown();
                     }
                 }
                 break;
@@ -181,6 +191,7 @@ int main(int argc, char* argv[])
                 else
                 {
                     //ok nice client is successfully authenticated
+                    active_names.insert(std::make_pair(user->get_name(), user));
                     user->set_verified();
                     connector->add_event(packet->get_fd(), PE_AUTHENTICATED);
                     Packet* newpacket = new Packet(packet->get_fd(), PK_LOGIN_SUCCESSFULL);
@@ -197,6 +208,8 @@ int main(int argc, char* argv[])
                 }
                 std::string query;
                 packet->read_string(query);
+
+                //TODO: allow more flexible user search
                 db->run_query("SELECT DISTINCT name from users WHERE LOWER(name) LIKE LOWER('"+query+"%') LIMIT 10;", nullptr);
                 int num = db->values.size();
 
@@ -218,6 +231,25 @@ int main(int argc, char* argv[])
                 {
                     break;
                 }
+                std::string name;
+                packet->read_string(name);
+                db->run_query("SELECT key from users WHERE name='"+name+"';", nullptr);
+                if(db->values.size()==0)
+                {
+                    Packet* newpacket = new Packet(packet->get_fd(), PK_ERROR);
+                    newpacket->append((int)PK_ERROR_USER);
+                    newpacket->append_string("User "+name+" is not registered!");
+                    connector->add_packet(newpacket);
+                    break;
+                }
+
+                auto entry = active_names.find(name);
+                bool status = (entry!=active_names.end());
+                Packet* newpacket = new Packet(packet->get_fd(), PK_ONLINE_STATUS);
+                newpacket->append_string(name);
+                newpacket->append((char)status);
+                connector->add_packet(newpacket);
+
                 break;
             }
             case PK_MSG:
@@ -241,12 +273,34 @@ int main(int argc, char* argv[])
                 }
 
                 //check if receiver is online -> otherwise store message for later deliverage
+                std::vector<unsigned char> msg_data;
+                packet->read_remaining(msg_data);
 
-                //if online send packet
+                auto entry = active_names.find(name);
+                if(entry!=active_names.end())
+                {
+                    //send message
+                    Packet* newpacket = new Packet(packet->get_fd(), PK_MSG);
+                    newpacket->append_string(user->get_name());
+                    newpacket->append_buffer(msg_data);
+                    connector->add_packet(newpacket);
+
+                }
+                else
+                {
+                    //store message
+                }
+
                 break;
             }
             default:
+            {
+                Packet* newpacket = new Packet(packet->get_fd(), PK_ERROR);
+                newpacket->append((int)PK_ERROR_UNDEFINED);
+                newpacket->append_string("Packet type "+std::to_string(packet->get_type())+" not valid!");
+                connector->add_packet(newpacket);
                 break;
+            }
             }
 
             delete packet;

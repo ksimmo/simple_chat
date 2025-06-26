@@ -30,6 +30,7 @@ void Connector::shutdown()
     delete this->main_peer;
     this->main_peer = nullptr;
 
+#ifdef USE_EPOLL
     if(this->epoll_fd>=0)
         close(this->epoll_fd);
 
@@ -39,6 +40,17 @@ void Connector::shutdown()
         this->epoll_evs = nullptr;
     }
     this->epoll_max_events = -1;
+#elif USE_KQUEUE
+    if(this->kq_fd>=0)
+        close(this->kq_fd);
+
+    if(this->kq_evs!=nullptr)
+    {
+        delete[] this->kq_evs;
+        this->kq_evs = nullptr;
+    }
+    this->kq_max_events = -1;
+#endif
 
     if(this->rw_buffer!=nullptr)
     {
@@ -84,6 +96,7 @@ bool Connector::initialize(ConnectorType conn_type, std::string address,int port
         return status;
     }
 
+#ifdef USE_EPOLL
     //create epoll
     this->epoll_fd = epoll_create1(0);
     if(this->epoll_fd==-1)
@@ -92,6 +105,16 @@ bool Connector::initialize(ConnectorType conn_type, std::string address,int port
         this->shutdown();
         return false;
     }
+#elif USE_KQUEUE
+    //create kqueue
+    this->kq_fd = kqueue();
+    if(this->kq_fd==-1)
+    {
+        std::cerr << "[-]Cannot create epoll: " << strerror(errno) << "(" << errno << ") !" << std::endl;
+        this->shutdown();
+        return false;
+    }
+#endif
 
     if(this->type==CONN_SERVER)
     {
@@ -140,6 +163,7 @@ bool Connector::initialize(ConnectorType conn_type, std::string address,int port
 
 
     //add server listen socket to epoll
+#ifdef USE_EPOLL
     struct epoll_event ev;
     //ERR and HUP are queried by default
     ev.events = this->type==CONN_SERVER ? EPOLLIN : EPOLLIN | EPOLLOUT; //server only needs listen
@@ -154,6 +178,17 @@ bool Connector::initialize(ConnectorType conn_type, std::string address,int port
 
     this->epoll_evs = new epoll_event[maxevents];
     this->epoll_max_events = maxevents;
+#elif USE_KQUEUE
+    struct kevent ev;
+    EV_SET(&ev, this->main_peer->get_socket(), EVFILT_READ, EV_ADD, 0, 0, nullptr);
+    if (kevent(kq, &change, 1, nullptr, 0, nullptr) == -1) {
+        std::cerr << "[-]Cannot register kqeueue: " << strerror(errno) << "(" << errno << ") !" << std::endl;
+        this->shutdown();
+        return false;
+    }
+    this->kq_evs = new kevent[maxevents];
+    this->kq_max_events = maxevents;
+#endif
 
     this->rw_buffer =  new char[RW_BUFFER_SIZE];
 
@@ -276,6 +311,7 @@ Packet* Connector::pop_packet()
 //main loop
 void Connector::step(int timeout)
 {
+#ifdef USE_EPOLL
     //check sockets
     int n_fd = epoll_wait(this->epoll_fd, this->epoll_evs, this->epoll_max_events, timeout);
     if(n_fd==-1)
@@ -321,6 +357,53 @@ void Connector::step(int timeout)
             }
         }
     }
+#elif USE_KQUEUE
+    //TODO: set timeout
+    int nEvents = kevent(this->kq_fd, nullptr, 0, this->kq_evs, this->kq_max_events, nullptr);
+    if(n_fd==-1)
+    {
+        if(errno!=EINTR)
+        {
+            std::cerr << "[-]Cannot wait for kqueue: " << strerror(errno) << "(" << errno << ") !" << std::endl;
+            this->shutdown();
+            return;
+        }
+    }
+    else if(n_fd==0)
+    {
+        //std::cerr << "[-] Kqeue timed out!" << std::endl;
+        if(this->type==CONN_CLIENT)
+            this->shutdown();
+        return;
+    }
+
+    for(int i=0;i<n_fd;i++)
+    {
+        if(this->type==CONN_CLIENT)
+        {
+            this->main_peer->handle_secure_connect();
+            this->main_peer->handle_events(this->epoll_evs[i].events, this->rw_buffer, RW_BUFFER_SIZE);
+            if(this->main_peer->should_disconnect)
+                break;
+        }
+        else if(this->type==CONN_SERVER)
+        {
+            if(this->kq_evs[i].ident==*this->main_peer->get_socket()) //our listen socket
+            {
+                if(this->kq_evs[i].filter & EPOLLIN)
+                    this->accept_client();
+            }
+            else //all other clients
+            {
+                //get peer
+                Peer* peer = this->connections[this->kq_evs[i].ident];
+                peer->handle_secure_accept();
+                peer->handle_events(this->kq_evs[i].filter, this->rw_buffer, RW_BUFFER_SIZE);
+
+            }
+        }
+    }
+#endif
 
     if(this->main_peer->should_disconnect)
     {

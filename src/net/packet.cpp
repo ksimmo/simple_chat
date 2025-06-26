@@ -200,9 +200,23 @@ bool Packet::read_buffer(std::vector<unsigned char>& data)
     return status;
 }
 
+void Packet::read_remaining(std::vector<unsigned char>& data)
+{
+    std::size_t num = this->header->length-this->read_pos;
+    if(num>0)
+    {
+        data.resize(num);
+        std::copy(this->data+this->read_pos+sizeof(PacketHeader), 
+                this->data+this->read_pos+sizeof(PacketHeader)+num,
+            (unsigned char*)data.data());
+        this->read_pos += num;
+    }
+}
+
 //register templates
 template bool Packet::read<std::size_t>(std::size_t&);
 template bool Packet::read<int>(int&);
+template bool Packet::read<char>(char&);
 
 /////////////////////////////////////////////
 //PacketBuffer

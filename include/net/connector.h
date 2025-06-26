@@ -25,9 +25,15 @@ private:
     Peer* main_peer = nullptr; //main socket
     std::unordered_map<int, Peer*> connections; //Server: accepted connections 
 
+#ifdef USE_EPOLL
     int epoll_fd = -1;
     int epoll_max_events = -1;
     struct epoll_event* epoll_evs = nullptr;
+#elif USE_KQUEUE
+    int kq_fd = -1;
+    int kq_max_events = -1;
+    struct kevent* kq_evs = nullptr;
+#endif
    
     char* rw_buffer = nullptr; //fixed read-write buffer
 

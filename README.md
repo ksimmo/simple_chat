@@ -10,6 +10,7 @@ To authenticate a user, a challenge-response procedure is implemented and suppor
 - [ ] Client GUI (QT6)
 - [ ] Add MLS or Double Ratchet E2E encryption
 - [ ] Implement message storage in database
+- [ ] Add configuration system
 
 ## Usage
 
@@ -41,6 +42,11 @@ database->close(); //only needed if reuse is intended before delete
 delete database;
 
 ```
+
+## Server
+Upon connection of a client and a succesfull initiation of the SSL handshake, the server waits a specified time window in which the client could try to login other wise the user will be disconnected. 
+For a successfull login the server must be able to verify the challenge signature received from the client in a certain time period.
+The server uses 3 sqlite tables to store user information, public keys for secret key exchanges and messages which could not be forwarded to the receiver due to not being logged in.
 
 
 ## Acknowledgements

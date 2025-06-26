@@ -7,15 +7,17 @@
 
 #include <cstdarg>
 
-enum PacketType {PK_EMPTY,              //Empty
-                PK_ERROR,               //An error happened
-                PK_LOGIN,               //Send by client initiates verification
-                PK_LOGIN_CHALLENGE,     //Authentification challenge
-                PK_LOGIN_SUCCESSFULL,   //Authentification was succesfull
-                PK_ONLINE_STATUS,         //Check if user is online
-                PK_USER_SEARCH,         //provide a string and search for nearest user names
-                PK_MSG,                 //A message packet between users
-                PK_MSG_DELIVERY_STATUS  //is the message delivered or even read?
+enum PacketType {PK_EMPTY,                      //Empty
+                PK_ERROR,                       //An error happened
+                PK_LOGIN,                       //Send by client initiates verification
+                PK_LOGIN_CHALLENGE,             //Authentification challenge
+                PK_LOGIN_SUCCESSFULL,           //Authentification was succesfull
+                PK_ONLINE_STATUS,               //Check if a user is online
+                PK_USER_SEARCH,                 //provide a string and search for nearest user names
+                PK_USER_KEYS,                   //get user keys to perform secret key exchange
+                PK_ONETIME_KEYS,                //the current user sends onetime keys to the server
+                PK_MSG,                         //A message packet between users
+                PK_MSG_DELIVERY_STATUS          //is the message delivered or read?
     };
 
 enum PacketErrors {PK_ERROR_NONE,
@@ -69,10 +71,12 @@ public:
     bool read_buffer(std::vector<unsigned char>& data);
     template<typename T>
     bool read(T& t);
+    void read_remaining(std::vector<unsigned char>& data);
 };
 
 extern template bool Packet::read<std::size_t>(std::size_t&);
 extern template bool Packet::read<int>(int&);
+extern template bool Packet::read<char>(char&);
 
 //a buffer holding unfinished packet bytes and not send packets
 class PacketBuffer

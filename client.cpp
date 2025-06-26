@@ -29,6 +29,9 @@ int main(int argc, char* argv[])
     db->run_query("CREATE TABLE IF NOT EXISTS keys (type TEXT NOT NULL, id INTEGER, key BLOB NOT NULL, date TEXT);", nullptr);
     //db->run_query("INSERT INTO keys (type, id, key, date) VALUES(?, ?, ?);", "tibt", "TestUser", priv.size(), priv.data(), "-");
 
+    //table for contacts
+    db->run_query("CREATE TABLE IF NOT EXISTS contacts (type TEXT NOT NULL UNIQUE, key BLOB NOT NULL, key_type TEXT NOT NULL, last_online TEXT);", nullptr);
+
     //Client* client = new Client();
     //client->initialize("127.0.0.1", 69100, 100, ctx);
     Connector* connector = new Connector(ctx);
@@ -101,6 +104,15 @@ int main(int argc, char* argv[])
                 case PK_LOGIN_SUCCESSFULL:
                 {
                     std::cout << "[+] Login successfull!" << std::endl;
+                    //now we can send all unsend messages and query if our contacts are online
+                    break;
+                }
+                case PK_ONLINE_STATUS:
+                {
+                    std::string name;
+                    packet->read_string(name);
+                    char status;
+                    packet->read(status);
                     break;
                 }
             }
