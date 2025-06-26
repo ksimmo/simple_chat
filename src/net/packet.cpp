@@ -202,6 +202,7 @@ bool Packet::read_buffer(std::vector<unsigned char>& data)
 
 //register templates
 template bool Packet::read<std::size_t>(std::size_t&);
+template bool Packet::read<int>(int&);
 
 /////////////////////////////////////////////
 //PacketBuffer

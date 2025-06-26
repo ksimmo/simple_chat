@@ -42,9 +42,12 @@ int main(int argc, char* argv[])
     //initialize database
     Database* db = new Database();
     db->connect("server.db", SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
-    //register user (test)
     db->run_query("CREATE TABLE IF NOT EXISTS users (name TEXT NOT NULL UNIQUE, key BLOB NOT NULL, key_type TEXT NOT NULL, last_login TEXT NOT NULL);", nullptr);
+    //register user (test)
     db->run_query("INSERT INTO users (name, key, key_type, last_login) VALUES(?, ?, ?, ?);", "tbtt", "TestUser", pub.size(), pub.data(), "ED25519", "never");
+
+    //create db for storing undelivered messages
+    db->run_query("CREATE TABLE IF NOT EXISTS messages (name TEXT NOT NULL, key BLOB NOT NULL, date TEXT NOT NULL);", nullptr);
 
     //setup host
     SSL_CTX* ctx = init_openssl(false, std::string("cert.pem"), std::string("key.pem"));
@@ -114,6 +117,7 @@ int main(int argc, char* argv[])
                 {
                     std::cout << "[-]Non existent user " << s << std::endl;
                     Packet* newpacket = new Packet(packet->get_fd(), PK_ERROR);
+                    newpacket->append((int)PK_ERROR_UNREGISTERED);
                     newpacket->append_string("User "+s+" is not registered!");
                     connector->add_packet(newpacket);
                     //disconnect
@@ -146,6 +150,7 @@ int main(int argc, char* argv[])
                     {
                         //disconnect
                         Packet* newpacket = new Packet(packet->get_fd(), PK_ERROR);
+                        newpacket->append((int)PK_ERROR_SERVER);
                         newpacket->append_string("Server error!");
                         connector->add_packet(newpacket);
                         disconnect_user(packet->get_fd());
@@ -167,6 +172,7 @@ int main(int argc, char* argv[])
                 if(!status)
                 {
                     Packet* newpacket = new Packet(packet->get_fd(), PK_ERROR);
+                    newpacket->append((int)PK_ERROR_AUTH);
                     newpacket->append_string("Authentification failed!");
                     connector->add_packet(newpacket);
                     //disconnect
@@ -180,6 +186,63 @@ int main(int argc, char* argv[])
                     Packet* newpacket = new Packet(packet->get_fd(), PK_LOGIN_SUCCESSFULL);
                     connector->add_packet(newpacket);
                 }
+                break;
+            }
+            case PK_USER_SEARCH:
+            {
+                User* user = users[packet->get_fd()];
+                if(!user->is_verified())
+                {
+                    break;
+                }
+                std::string query;
+                packet->read_string(query);
+                db->run_query("SELECT DISTINCT name from users WHERE LOWER(name) LIKE LOWER('"+query+"%') LIMIT 10;", nullptr);
+                int num = db->values.size();
+
+                Packet* newpacket = new Packet(packet->get_fd(), PK_USER_SEARCH);
+                newpacket->append(num); //number of search results
+                for(int i=0;i<num;i++)
+                {
+                    std::string temp;
+                    db->values[i][0]->get_string(temp);
+                    newpacket->append_string(temp);
+                }
+                connector->add_packet(newpacket);
+                break;
+            }
+            case PK_ONLINE_STATUS:
+            {
+                User* user = users[packet->get_fd()];
+                if(!user->is_verified())
+                {
+                    break;
+                }
+                break;
+            }
+            case PK_MSG:
+            {
+                User* user = users[packet->get_fd()];
+                if(!user->is_verified())
+                {
+                    break;
+                }
+                std::string name;
+                packet->read_string(name);
+                //check if user exists
+                db->run_query("SELECT key from users WHERE name='"+name+"';", nullptr);
+                if(db->values.size()==0)
+                {
+                    Packet* newpacket = new Packet(packet->get_fd(), PK_ERROR);
+                    newpacket->append((int)PK_ERROR_USER);
+                    newpacket->append_string("User "+name+" is not registered!");
+                    connector->add_packet(newpacket);
+                    break;
+                }
+
+                //check if receiver is online -> otherwise store message for later deliverage
+
+                //if online send packet
                 break;
             }
             default:

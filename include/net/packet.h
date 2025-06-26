@@ -12,9 +12,19 @@ enum PacketType {PK_EMPTY,              //Empty
                 PK_LOGIN,               //Send by client initiates verification
                 PK_LOGIN_CHALLENGE,     //Authentification challenge
                 PK_LOGIN_SUCCESSFULL,   //Authentification was succesfull
-                PK_USER_STATUS,         //Check if user is online
-                PK_MSG                  //A message packet between users
+                PK_ONLINE_STATUS,         //Check if user is online
+                PK_USER_SEARCH,         //provide a string and search for nearest user names
+                PK_MSG,                 //A message packet between users
+                PK_MSG_DELIVERY_STATUS  //is the message delivered or even read?
     };
+
+enum PacketErrors {PK_ERROR_NONE,
+                    PK_ERROR_UNDEFINED,          //any other error
+                    PK_ERROR_SERVER,              //error occured on server side
+                    PK_ERROR_UNREGISTERED,       //User is not registered
+                    PK_ERROR_AUTH,                  //Authentification failed
+                    PK_ERROR_USER                   //User does not exists
+                };
 
 #pragma pack(push, 1) //make sure that the header is the same on all architectures and no padding occurs
 struct PacketHeader
@@ -62,6 +72,7 @@ public:
 };
 
 extern template bool Packet::read<std::size_t>(std::size_t&);
+extern template bool Packet::read<int>(int&);
 
 //a buffer holding unfinished packet bytes and not send packets
 class PacketBuffer
