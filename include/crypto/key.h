@@ -5,10 +5,6 @@
 
 #include <openssl/evp.h>
 
-//current default is Curve25519, maybe exchange with post quantum protocol later
-//void ed25519_to_x25519_public(std::vector<unsigned char>& ed, std::vector<unsigned char>& x);
-
-
 //use the following names
 //ML-DSA-{44, 65, 87}
 //ML-KEM-{512,768, 1024} //768 recommended
@@ -52,5 +48,9 @@ public:
 
     //diffie-hellmann
 };
+
+//convert ED25519 to X25519
+Key* convert_ed25519_to_x25519_private(Key* priv);
+Key* convert_ed25519_to_x25519_public(Key* pub);
 
 #endif

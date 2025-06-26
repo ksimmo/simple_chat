@@ -2,80 +2,9 @@
 #include <openssl/err.h>
 #include <openssl/core_names.h>
 #include <openssl/bn.h>
+#include <openssl/sha.h>
 
 #include "crypto/key.h"
-
-Key* create_x25519_from_ed25519_private(Key* priv)
-{
-    std::vector<unsigned char> data;
-    if(!priv->extract_private(data))
-        return nullptr;
-
-    data[0] &= 248;
-    data[31] &= 127;
-    data[31] |= 64;
-
-    Key* k = new Key();
-    std::string s("X25519");
-    if(!k->create_from_private(s, data))
-    {
-        delete k;
-        return nullptr;
-    }
-
-    return k;
-}
-
-Key* create_x25519_from_ed25519_public(Key* priv)
-{
-    std::vector<unsigned char> data;
-    if(!priv->extract_public(data))
-        return nullptr;
-
-    BN_CTX* ctx = BN_CTX_new();
-    BN_CTX_start(ctx);
-
-    BIGNUM* y = BN_CTX_get(ctx);
-    BIGNUM* one = BN_CTX_get(ctx);
-    BIGNUM* num = BN_CTX_get(ctx);
-    BIGNUM* den = BN_CTX_get(ctx);
-    BIGNUM* inv_den = BN_CTX_get(ctx);
-    BIGNUM* u = BN_CTX_get(ctx);
-    BIGNUM* p = BN_CTX_get(ctx);
-
-    BN_hex2bn(&p, "7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFED");
-
-    std::vector<unsigned char> y_bytes(data);
-    data[31] &= 0x7F; //clear sign bit
-    BN_lebin2bn(y_bytes.data(), y_bytes.size(), y);
-
-    BN_one(one);
-
-    BN_mod_add(num, one, y, p, ctx);
-    BN_mod_sub(den, one ,y, p, ctx);
-    BN_mod_inverse(inv_den, den, p, ctx);
-    BN_mod_mul(u, num, inv_den, p, ctx);
-
-    std::vector<unsigned char> pub;
-    pub.resize(data.size());
-    BN_bn2lebinpad(u, pub.data(), pub.size());
-
-    BN_CTX_end(ctx);
-    BN_CTX_free(ctx);
-
-    Key* k = new Key();
-    std::string s("X25519");
-    if(!k->create_from_public(s, pub))
-    {
-        delete k;
-        return nullptr;
-    }
-
-    return k;
-}
-
-
-//--------------------------------------------
 
 Key::Key()
 {
@@ -542,3 +471,95 @@ bool Key::extract_public(std::vector<unsigned char>& data)
     return true;
 }
 */
+
+
+Key* convert_ed25519_to_x25519_private(Key* priv)
+{
+    std::vector<unsigned char> data;
+    if(!priv->extract_private(data))
+        return nullptr;
+
+    std::vector<unsigned char> out;
+    out.resize(SHA512_DIGEST_LENGTH);
+
+    //hash
+    if(SHA512(data.data(), data.size(), out.data())==0)
+    {
+        std::cerr << "[-] SHA512 failed: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+        return nullptr;
+    }
+
+    out[0] &= 248;
+    out[31] &= 127;
+    out[31] |= 64;
+
+    out.resize(data.size());
+
+    Key* k = new Key();
+    std::string s("X25519");
+    if(!k->create_from_private(s, out))
+    {
+        delete k;
+        return nullptr;
+    }
+
+    return k;
+}
+
+
+Key* convert_ed25519_to_x25519_public(Key* pub)
+{
+    std::vector<unsigned char> data;
+    if(!pub->extract_public(data))
+        return nullptr;
+
+    std::vector<unsigned char> out;
+    out.resize(data.size());
+
+    BN_CTX* ctx = BN_CTX_new();
+    BN_CTX_start(ctx);
+
+    BIGNUM* y = BN_CTX_get(ctx);
+    BIGNUM* one = BN_CTX_get(ctx);
+    BIGNUM* num = BN_CTX_get(ctx);
+    BIGNUM* den = BN_CTX_get(ctx);
+    BIGNUM* inv_den = BN_CTX_get(ctx);
+    BIGNUM* u = BN_CTX_get(ctx);
+    BIGNUM* p = BN_CTX_get(ctx);
+
+    //set modulus for the X25519 curve (p = 2^255 - 19)
+    BN_hex2bn(&p, "7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFED");
+
+    data[31] &= 0x7F; //clear sign bit
+    BN_lebin2bn(data.data(), data.size(), y);
+    BN_one(one);
+
+    BN_add(num, one, y); //1+y
+    BN_sub(den, one, y); //1-y
+
+    if(BN_mod_inverse(inv_den, den, p, ctx)==nullptr)
+    {
+        std::cerr << "[-] Inverse failed: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+        BN_CTX_end(ctx);
+        BN_CTX_free(ctx);
+        return nullptr;
+    }
+
+    //final result
+    BN_mod_mul(u, num, inv_den, p, ctx); //make sure modulo fits
+    BN_bn2lebinpad(u, out.data(), out.size());
+
+    BN_CTX_end(ctx);
+    BN_CTX_free(ctx);
+
+    Key* k = new Key();
+    std::string s("X25519");
+    if(!k->create_from_public(s, out))
+    {
+        std::cout << "Key creation failed" << std::endl;
+        delete k;
+        return nullptr;
+    }
+
+    return k;
+}
