@@ -15,7 +15,7 @@ enum PacketType {PK_EMPTY,                      //Empty
                 PK_ONLINE_STATUS,               //Check if a user is online
                 PK_USER_SEARCH,                 //provide a string and search for nearest user names
                 PK_USER_KEYS,                   //get user keys to perform secret key exchange
-                PK_ONETIME_KEYS,                //the current user sends onetime keys to the server
+                PK_UPLOAD_KEYS,                 //the current user sends keys to the server
                 PK_MSG,                         //A message packet between users
                 PK_MSG_DELIVERY_STATUS          //is the message delivered or read?
     };
@@ -62,8 +62,8 @@ public:
     template<typename T>
     void append(T t);
     void append_string(std::string s);
-    void append_buffer(void* data, std::size_t length);
-    void append_buffer(std::vector<unsigned char>& data);
+    void append_buffer(void* data, std::size_t length, bool write_size=true);
+    void append_buffer(std::vector<unsigned char>& data, bool write_size=true);
     void append_fmt(const char* fmt, ...); //inspired by ENet & Sauerbraten code ...
 
     bool read_string(std::string &s);
@@ -77,6 +77,7 @@ public:
 extern template bool Packet::read<std::size_t>(std::size_t&);
 extern template bool Packet::read<int>(int&);
 extern template bool Packet::read<char>(char&);
+extern template bool Packet::read<unsigned char>(unsigned char&);
 
 //a buffer holding unfinished packet bytes and not send packets
 class PacketBuffer

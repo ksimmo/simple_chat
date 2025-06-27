@@ -1,6 +1,8 @@
 #ifndef PEER_H
 #define PEER_H
 
+#include <chrono>
+
 #include "net/secure_socket.h"
 #include "net/packet.h"
 
@@ -24,15 +26,23 @@ private:
     std::string address = "";
     int port = -1;
     std::queue<PeerEvent> events;
-    
+    std::chrono::time_point<std::chrono::system_clock> time_conn; //time since connect/accept -> use to check ssl handshake time
+    std::chrono::time_point<std::chrono::system_clock> time_ssl_conn;
+    bool connected = false;
+    bool ssl_connected = false;
+
 public:
     Peer(SSL_CTX* ctx);
     ~Peer();
 
     PacketBuffer buffer_in;
     PacketBuffer buffer_out;
-    bool is_connected = false;
-    bool is_ssl_connected = false;
+
+    bool get_connected() { return this->connected; }
+    bool get_ssl_connected() { return this->ssl_connected;}
+    std::chrono::time_point<std::chrono::system_clock> get_time_conn() { return this->time_conn; }
+    void set_connected();
+    void set_ssl_connected();
     bool should_disconnect = false; //should disconnect
     bool should_disconnect_clean = false; //should disconnect but only when all outgoing packets are send!
 

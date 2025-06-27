@@ -6,6 +6,7 @@ To authenticate a user, a challenge-response procedure is implemented and suppor
 
 ## TODO
 - [x] Add support for at least 1 post-quantum cryptography (PQC) routine
+- [ ] Perform X3DH (improve code, add AEAD, it seems to work -> maybe do a few more tests here)
 - [ ] Non-Blocking Sockets epoll alternative (eg. kqueue for Apple, etc.)
 - [ ] Client GUI (QT6)
 - [ ] Add MLS or Double Ratchet E2E encryption

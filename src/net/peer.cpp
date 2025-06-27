@@ -44,17 +44,32 @@ bool Peer::create()
         return status;
     }
 
+    this->connected = false;
+    this->ssl_connected = false;
+
     return true;
+}
+
+void Peer::set_connected()
+{
+    this->connected = true;
+    this->time_conn = std::chrono::system_clock::now();
+}
+
+void Peer::set_ssl_connected()
+{
+    this->ssl_connected = true;
+    this->time_ssl_conn = std::chrono::system_clock::now();
 }
 
 void Peer::handle_secure_connect()
 {
-    if(this->is_connected && !this->is_ssl_connected && this->ctx!=nullptr)
+    if(this->connected && !this->ssl_connected && this->ctx!=nullptr)
     {
         StatusType st = this->sock->connect_secure();
         if(st==ST_SUCCESS)
         {
-            this->is_ssl_connected = true;
+            this->set_ssl_connected(); //true
             this->events.push(PE_HANDSHAKE_FINISHED);
         }
         else if(st==ST_FAIL)
@@ -67,12 +82,12 @@ void Peer::handle_secure_connect()
 void Peer::handle_secure_accept()
 {
     //ok first check if ssl is established
-    if(this->is_connected && !this->is_ssl_connected && this->ctx!=nullptr) //only use SSL if available
+    if(this->connected && !this->ssl_connected && this->ctx!=nullptr) //only use SSL if available
     {
         StatusType st = this->sock->accept_secure();
         if(st==ST_SUCCESS)
         {
-            this->is_ssl_connected = true;
+            this->set_ssl_connected(); //true
             this->events.push(PE_HANDSHAKE_FINISHED);
         }
         else if(st==ST_FAIL)
@@ -96,8 +111,8 @@ void Peer::handle_events(uint32_t evs, char* rw_buffer, int buffer_length)
     //we can read
     if(evs & EPOLLIN && !this->should_disconnect_clean) //only read if we should not disconnect
     {
-        if((this->is_ssl_connected && this->ctx!=nullptr) ||
-            (!this->is_ssl_connected && this->ctx==nullptr))
+        if((this->ssl_connected && this->ctx!=nullptr) ||
+            (!this->ssl_connected && this->ctx==nullptr))
         {
             //read
             int result = this->get_socket()->read(rw_buffer, buffer_length);
@@ -124,16 +139,16 @@ void Peer::handle_events(uint32_t evs, char* rw_buffer, int buffer_length)
     //ok we can write
     if(evs & EPOLLOUT)
     {
-        if(!this->is_connected)
+        if(!this->connected)
         {
             //std::cout << "Successfully connected!" << std::endl;
-            this->is_connected = true;
+            this->set_connected();
             this->events.push(PE_CONNECTED);
             //return;
         }
 
-        if((this->is_ssl_connected && this->ctx!=nullptr) ||
-            (this->is_connected && this->ctx==nullptr))
+        if((this->ssl_connected && this->ctx!=nullptr) ||
+            (this->connected && this->ctx==nullptr))
         {
             //write
             int result = this->buffer_out.write_packets(rw_buffer, buffer_length);

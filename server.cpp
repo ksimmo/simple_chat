@@ -36,8 +36,9 @@ int main(int argc, char* argv[])
 {
     signal(SIGINT, &quit_loop);
 
-    //for test case
+    //for test case (bob, alice)
     std::vector<unsigned char> pub = {71,130,169,175,37,119,84,77,211,33,86,176,125,7,109,171,150,179,34,32,59,161,196,197,178,90,96,18,20,246,14,211};
+    std::vector<unsigned char> pub2 = {242,166,74,118,251,209,138,140,15,177,96,237,234,0,148,242,120,50,97,254,145,4,18,93,218,239,245,215,175,44,197,202};
 
     //initialize database
     Database* db = new Database();
@@ -45,6 +46,9 @@ int main(int argc, char* argv[])
     db->run_query("CREATE TABLE IF NOT EXISTS users (name TEXT NOT NULL UNIQUE, key BLOB NOT NULL, key_type TEXT NOT NULL, last_login TEXT NOT NULL);", nullptr);
     //register user (test)
     db->run_query("INSERT INTO users (name, key, key_type, last_login) VALUES(?, ?, ?, ?);", "tbtt", "TestUser", pub.size(), pub.data(), "ED25519", "never");
+    db->run_query("INSERT INTO users (name, key, key_type, last_login) VALUES(?, ?, ?, ?);", "tbtt", "TestUser2", pub2.size(), pub2.data(), "ED25519", "never");
+
+    db->run_query("CREATE TABLE IF NOT EXISTS prekeys (name TEXT NOT NULL UNIQUE, key BLOB NOT NULL, key_type TEXT NOT NULL, signature BLOB NOT NULL, date TEXT NOT NULL);", nullptr);
 
     //create db for storing undelivered messages
     db->run_query("CREATE TABLE IF NOT EXISTS messages (name TEXT NOT NULL, key BLOB NOT NULL, date TEXT NOT NULL);", nullptr);
@@ -76,7 +80,7 @@ int main(int argc, char* argv[])
             {
                 case PE_HANDSHAKE_FINISHED:
                 {
-                    User* user = new User(ev.fd, std::chrono::system_clock::now());
+                    User* user = new User(ev.fd);
                     users.insert(std::make_pair(ev.fd, user));
                     std::cout << "[+]Client " << ev.fd << " is ready!" << std::endl;
                     break;
@@ -252,6 +256,90 @@ int main(int argc, char* argv[])
 
                 break;
             }
+            case PK_UPLOAD_KEYS:
+            {
+                User* user = users[packet->get_fd()];
+                if(!user->is_verified())
+                {
+                    break;
+                }
+                unsigned char byte;
+                packet->read(byte);
+                if(byte)
+                {
+                    std::vector<unsigned char> prekey;
+                    std::vector<unsigned char> signature;
+                    std::string type;
+                    packet->read_buffer(prekey);
+                    packet->read_string(type);
+                    packet->read_buffer(signature);
+
+                    //get date
+                    std::string date = "today"; //TODO: correct!
+
+                    //save
+                    db->run_query("INSERT INTO prekeys(name,key,key_type,signature,date) VALUES(?,?,?,?,?) ON CONFLICT(name) DO UPDATE SET key=excluded.key, key_type=excluded.key_type, signature=excluded.signature, date=excluded.date",
+                                "tbtbt", user->get_name().c_str(), prekey.size(), prekey.data(), type.c_str(), signature.size(), signature.data(), date.c_str());
+                }
+                else
+                {
+                    std::vector<unsigned char> onetime;
+                    packet->read_buffer(onetime);
+                    std::string type;
+                    packet->read_string(type);
+                    //save
+                }
+                break;
+            }
+            case PK_USER_KEYS:
+            {
+                std::string name;
+                packet->read_string(name);
+                db->run_query("SELECT key, key_type from users WHERE name='"+name+"';", nullptr);
+                if(db->values.size()==0)
+                {
+                    Packet* newpacket = new Packet(packet->get_fd(), PK_ERROR);
+                    newpacket->append((int)PK_ERROR_USER);
+                    newpacket->append_string("User "+name+" is not registered!");
+                    connector->add_packet(newpacket);
+                    break;
+                }
+
+                //get user identity key
+                std::vector<unsigned char> data;
+                data.resize(db->values[0][0]->get_length());
+                std::copy(db->values[0][0]->get_data(), db->values[0][0]->get_data()+data.size(), data.data());
+
+                std::string type;
+                db->values[0][1]->get_string(type);
+
+                //get user prekey & signature
+                db->run_query("SELECT key, key_type, signature from prekeys WHERE name='"+name+"';", nullptr);
+                std::vector<unsigned char> prekey;
+                prekey.resize(db->values[0][0]->get_length());
+                std::copy(db->values[0][0]->get_data(), db->values[0][0]->get_data()+prekey.size(), prekey.data());
+
+                std::string prekey_type;
+                db->values[0][1]->get_string(prekey_type);
+
+                std::vector<unsigned char> signature;
+                signature.resize(db->values[0][2]->get_length());
+                std::copy(db->values[0][2]->get_data(), db->values[0][2]->get_data()+signature.size(), signature.data());
+
+                Packet* newpacket = new Packet(packet->get_fd(), PK_USER_KEYS);
+                newpacket->append_string(name);
+                newpacket->append_buffer(data);
+                newpacket->append_string(type);
+                newpacket->append_buffer(prekey);
+                newpacket->append_string(prekey_type);
+                newpacket->append_buffer(signature);
+
+                newpacket->append_byte(0); //1 for available onetime prekey
+                connector->add_packet(newpacket);
+
+                //check if user has a one-time prekey available
+                break;
+            }
             case PK_MSG:
             {
                 User* user = users[packet->get_fd()];
@@ -280,11 +368,10 @@ int main(int argc, char* argv[])
                 if(entry!=active_names.end())
                 {
                     //send message
-                    Packet* newpacket = new Packet(packet->get_fd(), PK_MSG);
+                    Packet* newpacket = new Packet(entry->second->get_fd(), PK_MSG);
                     newpacket->append_string(user->get_name());
-                    newpacket->append_buffer(msg_data);
+                    newpacket->append_buffer(msg_data, false); //append raw bytes but not as buffer
                     connector->add_packet(newpacket);
-
                 }
                 else
                 {
@@ -305,6 +392,21 @@ int main(int argc, char* argv[])
 
             delete packet;
             packet = connector->pop_packet();
+        }
+
+        //check if user waits too long for login
+        auto now = std::chrono::system_clock::now();
+        for(auto it=users.begin();it!=users.end();it++)
+        {
+            if(!it->second->is_verified())
+            {
+                int64_t difference = std::chrono::duration_cast<std::chrono::milliseconds>(now - it->second->get_time_conn()).count();
+                if(difference>=5000) //ok client took too long to authentifiy
+                {
+                    std::cout << "[-] User " << it->first << " took too long to login!" << std::endl;
+                    disconnect_user(it->first);
+                }
+            }
         }
 
         //maybe wait here a few milliseconds

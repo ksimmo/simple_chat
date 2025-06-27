@@ -218,7 +218,7 @@ void Connector::accept_client()
             }
             else
             {
-                peer->is_connected = true;
+                peer->set_connected(); //true
                 this->connections.insert(std::make_pair((int)*peer->get_socket(), peer)); //here we need explicit conversion to int!!!
                 peer->add_event(PE_CONNECTED);
             }
@@ -444,6 +444,7 @@ void Connector::step(int timeout)
     }
     else if(this->type==CONN_SERVER)
     {
+        auto now = std::chrono::system_clock::now();
         //complete packages and remove clients if necessary
         for(auto it=this->connections.begin();it!=this->connections.end();)
         {
@@ -470,6 +471,17 @@ void Connector::step(int timeout)
                 std::lock_guard<std::mutex> lock(this->mutex);
                 this->incomming_packets.push(packet);
                 packet = it->second->buffer_in.pop_packet();
+            }
+
+            //check if clients ssl handshake idles too long
+            if(!it->second->get_ssl_connected())
+            {
+                int64_t difference = std::chrono::duration_cast<std::chrono::milliseconds>(now - it->second->get_time_conn()).count();
+                if(difference>=5000)
+                {
+                    std::cout << "[-] " << it->first << "'s ssl handshake took too long!" << std::endl;
+                    it->second->should_disconnect = true;
+                }
             }
 
 

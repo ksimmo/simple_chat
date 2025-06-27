@@ -20,13 +20,15 @@ private:
     std::chrono::time_point<std::chrono::system_clock> time_challenge;
     std::vector<unsigned char> challenge;
 public:
-    User(int fd, std::chrono::time_point<std::chrono::system_clock> time_conn);
+    User(int fd);
     ~User();
 
     int get_fd() { return this->fd; }
     void set_verified() { this->verified = true; }
     bool is_verified() { return this->verified; }
     std::string get_name() { return this->name; }
+    std::chrono::time_point<std::chrono::system_clock> get_time_conn() { return this->time_conn; }
+
     void set_name(std::string& s) { this->name = s; }
 
     void set_key(std::string& name, std::vector<unsigned char>& data);

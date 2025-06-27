@@ -73,18 +73,20 @@ void Packet::append_string(std::string s)
 }
 
 //write arbitrary bytes to packet
-void Packet::append_buffer(void* data, std::size_t length)
+void Packet::append_buffer(void* data, std::size_t length, bool write_size)
 {
-    this->append(length); //write length to packet
+    if(write_size)
+        this->append(length); //write length to packet
     this->resize_if_necessary(length); //take care of '\0'
     std::copy((unsigned char*)data, ((unsigned char*)data)+length, 
                 this->data+this->write_pos+sizeof(PacketHeader));
     this->write_pos += length;
 }
 
-void Packet::append_buffer(std::vector<unsigned char>& data)
+void Packet::append_buffer(std::vector<unsigned char>& data, bool write_size)
 {
-    this->append(data.size());
+    if(write_size)
+        this->append(data.size());
     this->resize_if_necessary(data.size());
     std::copy(data.data(), data.data()+data.size(), 
                 this->data+this->write_pos+sizeof(PacketHeader));
@@ -217,6 +219,7 @@ void Packet::read_remaining(std::vector<unsigned char>& data)
 template bool Packet::read<std::size_t>(std::size_t&);
 template bool Packet::read<int>(int&);
 template bool Packet::read<char>(char&);
+template bool Packet::read<unsigned char>(unsigned char&);
 
 /////////////////////////////////////////////
 //PacketBuffer

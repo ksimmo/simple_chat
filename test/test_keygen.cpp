@@ -24,7 +24,7 @@ int main(int argc, char* argv[])
         //printf("%02x", priv[i]);
         s1 += std::to_string((int)priv[i]) + ",";
     }
-    for (std::size_t i = 0; i < priv.size(); i++)
+    for (std::size_t i = 0; i < pub.size(); i++)
     {
         //printf("%02x", priv[i]);
         s1 += std::to_string((int)pub[i]) + ",";
@@ -88,5 +88,50 @@ int main(int argc, char* argv[])
     k3 = new Key();
     k3->create(a);
     delete k3;
+
+
+
+    //create ed25519 keypair
+    kk = new Key();
+    a = "ED25519";
+    kk->create(a);
+
+    priv.clear(); pub.clear();
+    kk->extract_private(priv);
+    kk->extract_public(pub);
+
+    s1 = "";
+    s2 = "";
+    for(int i=0;i<priv.size();i++)
+    {
+        s1 += std::to_string((int)priv[i]) + ",";
+        s2 += std::to_string((int)pub[i]) + ",";
+    }
+    delete kk;
+
+    std::cout << s1 << std::endl;
+    std::cout << s2 << std::endl;
+
+    //create x25519 keypair
+    kk = new Key();
+    a = "X25519";
+    kk->create(a);
+
+    priv.clear(); pub.clear();
+    kk->extract_private(priv);
+    kk->extract_public(pub);
+
+    s1 = "";
+    s2 = "";
+    for(int i=0;i<priv.size();i++)
+    {
+        s1 += std::to_string((int)priv[i]) + ",";
+        s2 += std::to_string((int)pub[i]) + ",";
+    }
+    delete kk;
+
+    std::cout << s1 << std::endl;
+    std::cout << s2 << std::endl;
+
     return 0;
 }

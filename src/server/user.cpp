@@ -4,8 +4,9 @@
 
 #include "server/user.h"
 
-User::User(int fd, std::chrono::time_point<std::chrono::system_clock> conn_time) : fd(fd), time_conn(conn_time)
+User::User(int fd) : fd(fd)
 {
+    this->time_conn = std::chrono::system_clock::now();
 }
 
 User::~User()

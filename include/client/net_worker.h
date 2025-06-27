@@ -3,14 +3,20 @@
 
 #include <QObject>
 
+#include "net/connector.h"
+
 class NetWorker : public QObject
 {
     QOBJECT
 private:
+    Connector* connector = nullptr;
 public:
-    NetWorker();
+    NetWorker(QObject* parent = nullptr, Connector* connector=nullptr);
     ~NetWorker();
+
+    void process();
 //public slots:
+    //void connect();
 //signals:
 };
 
