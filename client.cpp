@@ -261,6 +261,14 @@ int main(int argc, char* argv[])
                         std::cout << temp << std::endl;
 
                         //use AEAD scheme to encrypt both identity keys to 
+                        std::vector<unsigned char> comb;
+                        comb.insert(comb.end(), pub2.begin(), pub2.end()); //id pub alice
+                        comb.insert(comb.end(), idkey.begin(), idkey.end()); //id pub bob
+                        std::vector<unsigned char> iv;
+                        create_iv(iv);
+                        std::vector<unsigned char> tag;
+                        std::vector<unsigned char> cipher;
+                        aead_encrypt(out_alice, comb, cipher, iv, tag);
 
                         
                         //generate initial message
@@ -271,6 +279,9 @@ int main(int argc, char* argv[])
                         newpacket->append_string(a);
                         newpacket->append_buffer(epkey);
                         newpacket->append_string(prekey_type);
+                        newpacket->append_buffer(iv);
+                        newpacket->append_buffer(tag);
+                        newpacket->append_buffer(cipher);
                         connector->add_packet(newpacket);
 
                         std::cout << "Sending packet " << newpacket->get_length() << std::endl;
@@ -350,6 +361,34 @@ int main(int argc, char* argv[])
                         delete x;
 
                         //use secret to decrypt initial message and verify if public keys match
+                        std::vector<unsigned char> iv;
+                        packet->read_buffer(iv);
+                        std::vector<unsigned char> tag;
+                        packet->read_buffer(tag);
+
+                        std::vector<unsigned char> cipher;
+                        packet->read_buffer(cipher);
+
+                        std::vector<unsigned char> plain;
+                        aead_decrypt(out_alice, plain, cipher, iv, tag);
+
+                        std::vector<unsigned char> comb;
+                        comb.insert(comb.end(), idkey.begin(), idkey.end()); //id pub alice
+                        comb.insert(comb.end(), pub.begin(), pub.end()); //id pub bob
+
+                        //compare
+                        bool is_equal = true;
+                        for(int i=0;i<comb.size();i++)
+                        {
+                            if(comb[i]!=plain[i])
+                            {
+                                is_equal = false;
+                                break;
+                            }
+                        }
+
+                        std::cout << "Cipher is equal: " << is_equal << std::endl;
+
                     }
                     break;
                 }
