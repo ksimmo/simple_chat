@@ -201,63 +201,16 @@ int main(int argc, char* argv[])
                     unsigned char byte;
                     packet->read(byte);
 
-                    //verify signature
-                    Key* kk = new Key();
-                    kk->create_from_public(id_type, idkey);
-
-                    bool verified = kk->verify_signature(prekey, signature);
-                    if(verified)
-                        std::cout << "Prekey signature is valid!" << std::endl;
-                    else
-                    {
-                        std::cout << "Prekey signature invalid!" << std::endl;
-                    }
-
-                    Key* k2 = convert_ed25519_to_x25519_public(kk); //needed for dh exchange
-
-                    delete kk;
-
                     if(alice)
                     {
-                        kk = new Key();
-                        kk->create_from_public(prekey_type, prekey);
-
-                        Key* ephemeral = new Key();
-                        ephemeral->create(prekey_type);
-                        std::vector<unsigned char> epkey; //needed for initial message
-                        ephemeral->extract_public(epkey);
-
-                        //convert alice identity key
-                        Key* bla = new Key();
-                        bla->create_from_private(a, priv2);
-                        Key* conv = convert_ed25519_to_x25519_private(bla);
-                        delete bla;
-
-                        //calculate dh
-                        std::vector<unsigned char> secret1;
-                        std::vector<unsigned char> secret2;
-                        std::vector<unsigned char> secret3;
-                        dh(conv, kk, secret1); //signed prekey
-                        dh(ephemeral, k2, secret2); //identity
-                        dh(ephemeral, kk, secret3); //signed prekey
-                        //one time key currently not supported
-
-                        delete ephemeral;
-                        delete kk;
-                        delete conv;
-
-                        //concatenate secrets
-                        std::vector<unsigned char> secret_combined;
-                        secret_combined.insert(secret_combined.end(), secret1.begin(), secret1.end());
-                        secret_combined.insert(secret_combined.end(), secret2.begin(), secret2.end());
-                        secret_combined.insert(secret_combined.end(), secret3.begin(), secret3.end());
-
-                        std::vector<unsigned char> out_alice;
-                        kdf(secret_combined, out_alice, 32);
+                       std::vector<unsigned char> secret;
+                       std::vector<unsigned char> epkey;
+                       std::vector<unsigned char> ot;
+                       x3dh_alice(priv2, epkey, idkey, prekey, ot, signature, id_type, prekey_type, secret);
 
                         std::string temp;
-                        for(int i=0;i<out_alice.size();i++)
-                            temp += std::to_string((int)out_alice[i])+",";
+                        for(int i=0;i<secret.size();i++)
+                            temp += std::to_string((int)secret[i])+",";
                         std::cout << temp << std::endl;
 
                         //use AEAD scheme to encrypt both identity keys to 
@@ -268,17 +221,18 @@ int main(int argc, char* argv[])
                         create_iv(iv);
                         std::vector<unsigned char> tag;
                         std::vector<unsigned char> cipher;
-                        aead_encrypt(out_alice, comb, cipher, iv, tag);
+                        aead_encrypt(secret, comb, cipher, iv, tag);
 
                         
                         //generate initial message
                         Packet* newpacket = new Packet(-1, PK_MSG);
                         newpacket->append_string("TestUser");
-                        newpacket->append_byte(1); //initial message
+                        newpacket->append((std::size_t)0); //message number
                         newpacket->append_buffer(pub2);
                         newpacket->append_string(a);
                         newpacket->append_buffer(epkey);
                         newpacket->append_string(prekey_type);
+                        //TODO: notify if and which onetime prekey we have used
                         newpacket->append_buffer(iv);
                         newpacket->append_buffer(tag);
                         newpacket->append_buffer(cipher);
@@ -286,7 +240,6 @@ int main(int argc, char* argv[])
 
                         std::cout << "Sending packet " << newpacket->get_length() << std::endl;
                     }
-                    delete k2;
                     break;
                 }
                 case PK_MSG:
@@ -296,9 +249,9 @@ int main(int argc, char* argv[])
 
                     std::cout << "received message from " << name << " length=" << packet->get_length() << std::endl;
 
-                    unsigned char byte;
-                    packet->read(byte);
-                    if(byte)
+                    std::size_t number;
+                    packet->read(number);
+                    if(number==0) //initial message
                     {
                         //get id key
                         std::vector<unsigned char> idkey;
@@ -306,7 +259,6 @@ int main(int argc, char* argv[])
 
                         std::string idtype;
                         packet->read_string(idtype);
-                        std::cout << "idkey size=" << idkey.size() << " type=" << idtype << std::endl;
 
                         //get ephermeal public key
                         std::vector<unsigned char> epkey;
@@ -314,51 +266,18 @@ int main(int argc, char* argv[])
 
                         std::string type;
                         packet->read_string(type);
-                        std::cout << "epkey size=" << epkey.size() << " type=" << type << std::endl;
 
-                        //perform dh
-                        Key* bla = new Key();
-                        bla->create_from_private(a, priv);
-                        Key* kp = convert_ed25519_to_x25519_private(bla);
-                        delete bla;
+                        //check if a onetime prekey was used
 
-                        Key* ep = new Key();
-                        ep->create_from_public(type, epkey);
 
-                        Key* sig = new Key();
-                        sig->create_from_private(type, prekey_priv);
-
-                        Key* kkk = new Key();
-                        kkk->create_from_public(idtype, idkey);
-
-                        Key* x = convert_ed25519_to_x25519_public(kkk);
-                        delete kkk;
-
-                        //calculate dh
-                        std::vector<unsigned char> secret1;
-                        std::vector<unsigned char> secret2;
-                        std::vector<unsigned char> secret3;
-                        dh(sig, x, secret1); //this seems problematic
-                        dh(kp, ep, secret2);
-                        dh(sig, ep, secret3);
-
-                        //concatenate secrets
-                        std::vector<unsigned char> secret_combined;
-                        secret_combined.insert(secret_combined.end(), secret1.begin(), secret1.end());
-                        secret_combined.insert(secret_combined.end(), secret2.begin(), secret2.end());
-                        secret_combined.insert(secret_combined.end(), secret3.begin(), secret3.end());
-
-                        std::vector<unsigned char> out_alice;
-                        kdf(secret_combined, out_alice, 32);
+                        std::vector<unsigned char> secret;
+                        std::vector<unsigned char> ot;
+                        x3dh_bob(priv, prekey_priv, ot, idkey, epkey, idtype, type, secret);
 
                         std::string temp;
-                        for(int i=0;i<out_alice.size();i++)
-                            temp += std::to_string((int)out_alice[i])+",";
+                        for(int i=0;i<secret.size();i++)
+                            temp += std::to_string((int)secret[i])+",";
                         std::cout << temp << std::endl;
-
-                        delete ep;
-                        delete sig;
-                        delete x;
 
                         //use secret to decrypt initial message and verify if public keys match
                         std::vector<unsigned char> iv;
@@ -370,8 +289,9 @@ int main(int argc, char* argv[])
                         packet->read_buffer(cipher);
 
                         std::vector<unsigned char> plain;
-                        aead_decrypt(out_alice, plain, cipher, iv, tag);
+                        aead_decrypt(secret, plain, cipher, iv, tag);
 
+                        //check if we got the secret right
                         std::vector<unsigned char> comb;
                         comb.insert(comb.end(), idkey.begin(), idkey.end()); //id pub alice
                         comb.insert(comb.end(), pub.begin(), pub.end()); //id pub bob
@@ -388,7 +308,15 @@ int main(int argc, char* argv[])
                         }
 
                         std::cout << "Cipher is equal: " << is_equal << std::endl;
+                        if(!is_equal)
+                        {
+                            //abort creating chat with Alice
+                        }
 
+                    }
+                    else
+                    {
+                        //ok perform double ratchet
                     }
                     break;
                 }

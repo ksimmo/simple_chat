@@ -99,10 +99,10 @@ bool kdf(std::vector<unsigned char>& secret, std::vector<unsigned char>& output,
 
 
 //AEAD
-bool create_iv(std::vector<unsigned char>& iv)
+bool create_iv(std::vector<unsigned char>& iv, std::size_t length)
 {
     iv.resize(12);
-    if(!RAND_bytes(iv.data(), 12))
+    if(!RAND_bytes(iv.data(), length))
     {
         std::cerr << "[-] Cannot create iv: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
         return false;
@@ -202,6 +202,348 @@ bool aead_decrypt(std::vector<unsigned char>& key, std::vector<unsigned char>& d
     data.resize(data_length);
 
     EVP_CIPHER_CTX_free(ctx);
+
+    return true;
+}
+
+
+//x3dh according to signal protocol
+bool x3dh_alice(std::vector<unsigned char> alice_priv_id, std::vector<unsigned char>& alice_pub_ep, 
+                std::vector<unsigned char>& bob_pub_id, std::vector<unsigned char>& bob_pub_spk, std::vector<unsigned char>& bob_pub_ot,
+                std::vector<unsigned char>& signature, std::string& id_type, std::string& other_type, std::vector<unsigned char>& final_secret)
+{
+    //create keys (ALICE)
+    Key* alice_id = new Key(); //identity key (ed25519)
+    if(!alice_id->create_from_private(id_type, alice_priv_id))
+    {
+        delete alice_id;
+        return false;
+    }
+
+    Key* alice_ep = new Key(); //create new ephemeral key (X25519)
+    if(!alice_ep->create(other_type))
+    {
+        delete alice_id;
+        delete alice_ep;
+        return false;
+    }
+
+    if(!alice_ep->extract_public(alice_pub_ep)) //save public ephemeral key for Bob
+    {
+        delete alice_id;
+        delete alice_ep;
+        return false;
+    }
+
+    Key* alice_id_conv = convert_ed25519_to_x25519_private(alice_id); //convert id key to X25519
+    if(alice_id_conv==nullptr)
+    {
+        delete alice_id;
+        delete alice_ep;
+        return false;
+    }
+
+    //create keys (BOB)
+    Key* bob_id = new Key(); //identity key
+    if(!bob_id->create_from_public(id_type, bob_pub_id))
+    {
+        delete alice_id;
+        delete alice_ep;
+        delete alice_id_conv;
+        delete bob_id;
+        return false;
+    }
+
+    Key* bob_id_conv = convert_ed25519_to_x25519_public(bob_id); //convert id key to X25519
+    if(bob_id_conv==nullptr)
+    {
+        delete alice_id;
+        delete alice_ep;
+        delete alice_id_conv;
+        delete bob_id;
+        return false;
+    }
+
+    Key* bob_spk = new Key(); //signed prekey (X25519)
+    if(!bob_spk->create_from_public(other_type, bob_pub_spk))
+    {
+        delete alice_id;
+        delete alice_ep;
+        delete alice_id_conv;
+        delete bob_id;
+        delete bob_id_conv;
+        delete bob_spk;
+        return false;
+    }
+
+    Key* bob_ot = nullptr;
+    if(bob_pub_ot.size()>0) //only use onetime prekey if available
+    {
+        bob_ot = new Key();
+        if(!bob_ot->create_from_public(other_type, bob_pub_ot))
+        {
+            delete alice_id;
+            delete alice_ep;
+            delete alice_id_conv;
+            delete bob_id;
+            delete bob_id_conv;
+            delete bob_spk;
+            delete bob_ot;
+            return false;
+        }
+    }
+
+
+    //first of all verify signature
+    if(!bob_id->verify_signature(bob_pub_spk, signature))
+    {
+        std::cerr << "Prekey signature could not be verified!" << std::endl;
+        delete alice_id;
+        delete alice_ep;
+        delete alice_id_conv;
+        delete bob_id;
+        delete bob_id_conv;
+        delete bob_spk;
+        if(bob_ot!=nullptr)
+            delete bob_ot;
+        return false;
+    }
+
+    //perform dh
+    std::vector<unsigned char> secret1;
+    std::vector<unsigned char> secret2;
+    std::vector<unsigned char> secret3;
+    std::vector<unsigned char> secret4;
+    if(!dh(alice_id_conv, bob_spk, secret1))
+    {
+        delete alice_id;
+        delete alice_ep;
+        delete alice_id_conv;
+        delete bob_id;
+        delete bob_id_conv;
+        delete bob_spk;
+        if(bob_ot!=nullptr)
+            delete bob_ot;
+        return false;
+    }
+    if(!dh(alice_ep, bob_id_conv, secret2))
+    {
+        delete alice_id;
+        delete alice_ep;
+        delete alice_id_conv;
+        delete bob_id;
+        delete bob_id_conv;
+        delete bob_spk;
+        if(bob_ot!=nullptr)
+            delete bob_ot;
+        return false;
+    }
+    if(!dh(alice_ep, bob_spk, secret3))
+    {
+        delete alice_id;
+        delete alice_ep;
+        delete alice_id_conv;
+        delete bob_id;
+        delete bob_id_conv;
+        delete bob_spk;
+        if(bob_ot!=nullptr)
+            delete bob_ot;
+        return false;
+    }
+    if(bob_ot!=nullptr) //only if onetime prekey is available
+    {
+        if(!dh(alice_ep, bob_ot, secret4))
+        {
+            delete alice_id;
+            delete alice_ep;
+            delete alice_id_conv;
+            delete bob_id;
+            delete bob_id_conv;
+            delete bob_spk;
+            delete bob_ot; //we do not need to check for 0
+            return false;
+        }
+    }
+
+    delete alice_id;
+    delete alice_ep;
+    delete alice_id_conv;
+    delete bob_id;
+    delete bob_id_conv;
+    delete bob_spk;
+    if(bob_ot!=nullptr)
+        delete bob_ot;
+
+    //concatenate secrets
+    std::vector<unsigned char> secret_combined;    
+    secret_combined.insert(secret_combined.end(), secret1.begin(), secret1.end());
+    secret_combined.insert(secret_combined.end(), secret2.begin(), secret2.end());
+    secret_combined.insert(secret_combined.end(), secret3.begin(), secret3.end());
+    secret_combined.insert(secret_combined.end(), secret4.begin(), secret4.end());
+
+    //get final secret
+    if(!kdf(secret_combined, final_secret, 32))
+        return false;
+
+    return true;
+}
+
+bool x3dh_bob(std::vector<unsigned char> bob_priv_id, std::vector<unsigned char>& bob_priv_spk, 
+                std::vector<unsigned char>& bob_priv_ot, std::vector<unsigned char>& alice_pub_id, std::vector<unsigned char>& alice_pub_ep,
+                std::string& id_type, std::string& other_type, std::vector<unsigned char>& final_secret)
+{
+    //create keys (BOB)
+    Key* bob_id = new Key(); //identity key (ED25519)
+    if(!bob_id->create_from_private(id_type, bob_priv_id))
+    {
+        delete bob_id;
+        return false;
+    }
+
+    Key* bob_id_conv = convert_ed25519_to_x25519_private(bob_id); //convert id key to X25519
+    if(bob_id_conv==nullptr)
+    {
+        delete bob_id;
+        return false;
+    }
+
+    Key* bob_spk = new Key(); //signed prekey (X25519)
+    if(!bob_spk->create_from_private(other_type, bob_priv_spk))
+    {
+        delete bob_id;
+        delete bob_id_conv;
+        delete bob_spk;
+        return false;
+    }
+
+    Key* bob_ot = nullptr;
+    if(bob_priv_ot.size()>0)
+    {
+        bob_ot = new Key();
+        if(!bob_ot->create_from_private(other_type, bob_priv_ot)) //onetime prekey (X25519)
+        {
+            delete bob_id;
+            delete bob_id_conv;
+            delete bob_spk;
+            delete bob_ot;
+            return false;
+        }
+    }
+
+    //create keys (ALICE)
+    Key* alice_id = new Key(); //identity key (ED25519)
+    if(!alice_id->create_from_public(id_type, alice_pub_id))
+    {
+        delete bob_id;
+        delete bob_id_conv;
+        delete bob_spk;
+        if(bob_ot!=nullptr)
+            delete bob_ot;
+        delete alice_id;
+        return false;
+    }
+
+    Key* alice_id_conv = convert_ed25519_to_x25519_public(alice_id); //convert id key to X25519
+    if(alice_id_conv==nullptr)
+    {
+        delete bob_id;
+        delete bob_id_conv;
+        delete bob_spk;
+        if(bob_ot!=nullptr)
+            delete bob_ot;
+        delete alice_id;
+        return false;
+    }
+
+    Key* alice_ep = new Key(); //ephemeral key (X25519)
+    if(!alice_ep->create_from_public(other_type, alice_pub_ep))
+    {
+        delete bob_id;
+        delete bob_id_conv;
+        delete bob_spk;
+        if(bob_ot!=nullptr)
+            delete bob_ot;
+        delete alice_id;
+        delete alice_id_conv;
+        delete alice_ep;
+        return false;
+    }
+
+    //perform dh
+    std::vector<unsigned char> secret1;
+    std::vector<unsigned char> secret2;
+    std::vector<unsigned char> secret3;
+    std::vector<unsigned char> secret4;
+    if(!dh(bob_spk, alice_id_conv, secret1))
+    {
+        delete bob_id;
+        delete bob_id_conv;
+        delete bob_spk;
+        if(bob_ot!=nullptr)
+            delete bob_ot;
+        delete alice_id;
+        delete alice_id_conv;
+        delete alice_ep;
+        return false;
+    }
+    if(!dh(bob_id_conv, alice_ep, secret2))
+    {
+        delete bob_id;
+        delete bob_id_conv;
+        delete bob_spk;
+        if(bob_ot!=nullptr)
+            delete bob_ot;
+        delete alice_id;
+        delete alice_id_conv;
+        delete alice_ep;
+        return false;
+    }
+    if(!dh(bob_spk, alice_ep, secret3))
+    {
+        delete bob_id;
+        delete bob_id_conv;
+        delete bob_spk;
+        if(bob_ot!=nullptr)
+            delete bob_ot;
+        delete alice_id;
+        delete alice_id_conv;
+        delete alice_ep;
+        return false;
+    }
+    if(bob_ot!=nullptr)
+    {
+        if(!dh(bob_ot, alice_ep, secret4))
+        {
+            delete bob_id;
+            delete bob_id_conv;
+            delete bob_spk;
+            delete bob_ot;
+            delete alice_id;
+            delete alice_id_conv;
+            delete alice_ep;
+            return false;
+        }
+    }
+
+    delete bob_id;
+    delete bob_id_conv;
+    delete bob_spk;
+    if(bob_ot!=nullptr)
+        delete bob_ot;
+    delete alice_id;
+    delete alice_id_conv;
+    delete alice_ep;
+
+    //concatenate single secrects
+    std::vector<unsigned char> secret_combined;
+    secret_combined.insert(secret_combined.end(), secret1.begin(), secret1.end());
+    secret_combined.insert(secret_combined.end(), secret2.begin(), secret2.end());
+    secret_combined.insert(secret_combined.end(), secret3.begin(), secret3.end());
+    secret_combined.insert(secret_combined.end(), secret4.begin(), secret4.end());
+
+    //get final secret
+    if(!kdf(secret_combined, final_secret, 32))
+        return false;
 
     return true;
 }
