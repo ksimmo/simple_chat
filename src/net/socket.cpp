@@ -9,6 +9,14 @@
 
 #include "net/socket.h"
 
+void initialize_socket()
+{
+#ifdef WIN32
+    WSADATA wsa;
+    WSAStartup(MAKEWORD(2, 2), &wsa);
+#endif
+}
+
 //constructors
 Socket::Socket()
 {

@@ -25,6 +25,7 @@ int main(int argc, char* argv[])
 
     QCoreApplication app(argc, argv);
     signal(SIGINT, &quit_loop);
+    initialize_socket();
     SSL_CTX* ctx = init_openssl();
     
     std::string a = "ED25519";

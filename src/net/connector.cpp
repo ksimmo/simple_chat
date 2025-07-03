@@ -181,7 +181,7 @@ bool Connector::initialize(ConnectorType conn_type, std::string address,int port
 #elif USE_KQUEUE
     struct kevent ev;
     EV_SET(&ev, this->main_peer->get_socket(), EVFILT_READ, EV_ADD, 0, 0, nullptr);
-    if (kevent(kq, &change, 1, nullptr, 0, nullptr) == -1) {
+    if (kevent(kq, &ev, 1, nullptr, 0, nullptr) == -1) {
         std::cerr << "[-]Cannot register kqeueue: " << strerror(errno) << "(" << errno << ") !" << std::endl;
         this->shutdown();
         return false;
@@ -206,6 +206,7 @@ void Connector::accept_client()
         bool temp = peer->get_socket()->set_blocking(false);
         if(temp)
         {
+#ifdef USE_EPOLL
             //add client to epoll
             struct epoll_event ev;
             ev.events = EPOLLIN | EPOLLOUT | EPOLLERR | EPOLLHUP;
@@ -215,13 +216,30 @@ void Connector::accept_client()
             {
                 delete peer;
                 std::cerr << "[-]Cannot add client to epoll: " << strerror(errno) << "(" << errno << ") !" << std::endl;
+                return;
             }
-            else
-            {
-                peer->set_connected(); //true
-                this->connections.insert(std::make_pair((int)*peer->get_socket(), peer)); //here we need explicit conversion to int!!!
-                peer->add_event(PE_CONNECTED);
+#elif USE_KQUEUE
+            //add to reading queue
+            struct kevent ev;
+            EV_SET(&ev, *peer->get_socket(), EVFILT_READ, EV_ADD, 0, 0, nullptr);
+            if (kevent(kq, &ev, 1, nullptr, 0, nullptr) == -1) {
+                std::cerr << "[-]Cannot add client to kqueue: " << strerror(errno) << "(" << errno << ") !" << std::endl;
+                delete peer;
+                return;
             }
+
+            //add to writing queue
+            struct kevent ev2;
+            EV_SET(&ev2, *peer->get_socket(), EVFILT_WRITE, EV_ADD, 0, 0, nullptr);
+            if (kevent(kq, &ev, 1, nullptr, 0, nullptr) == -1) {
+                std::cerr << "[-]Cannot add client to kqueue: " << strerror(errno) << "(" << errno << ") !" << std::endl;
+                delete peer;
+                return;
+            }
+#endif
+            peer->set_connected(); //true
+            this->connections.insert(std::make_pair((int)*peer->get_socket(), peer)); //here we need explicit conversion to int!!!
+            peer->add_event(PE_CONNECTED);
         }
         else
         {
@@ -237,6 +255,7 @@ void Connector::accept_client()
 
 void Connector::disconnect_client(int fd)
 {
+#ifdef USE_EPOLL
     struct epoll_event ev;
     ev.events = EPOLLIN;
     ev.data.fd = fd;
@@ -245,6 +264,25 @@ void Connector::disconnect_client(int fd)
     {
         std::cerr << "[-]Cannot remove client from epoll!: " << strerror(errno) << "(" << errno << ") !" << std::endl;
     }
+#elif USE_KQUEUE
+    //remove read notifier
+    struct kevent ev;
+    EV_SET(&ev, fd, EVFILT_READ, EV_DELETE, 0, 0, nullptr);
+    if (kevent(kq, &ev, 1, nullptr, 0, nullptr) == -1) {
+        std::cerr << "[-]Cannot register kqeueue: " << strerror(errno) << "(" << errno << ") !" << std::endl;
+        this->shutdown();
+        return false;
+    }
+
+    //remove write notifier
+    struct kevent ev2;
+    EV_SET(&ev2, fd, EVFILT_WRITE, EV_DELETE, 0, 0, nullptr);
+    if (kevent(kq, &ev2, 1, nullptr, 0, nullptr) == -1) {
+        std::cerr << "[-]Cannot register kqeueue: " << strerror(errno) << "(" << errno << ") !" << std::endl;
+        this->shutdown();
+        return false;
+    }
+#endif
 
     //close connection and remove from active clients
     auto entry = this->connections.find(fd);
@@ -359,7 +397,8 @@ void Connector::step(int timeout)
     }
 #elif USE_KQUEUE
     //TODO: set timeout
-    int nEvents = kevent(this->kq_fd, nullptr, 0, this->kq_evs, this->kq_max_events, nullptr);
+    struct timespec *timeout = nullptr;
+    int n_fd = kevent(this->kq_fd, nullptr, 0, this->kq_evs, this->kq_max_events, timeout);
     if(n_fd==-1)
     {
         if(errno!=EINTR)
@@ -382,7 +421,7 @@ void Connector::step(int timeout)
         if(this->type==CONN_CLIENT)
         {
             this->main_peer->handle_secure_connect();
-            this->main_peer->handle_events(this->epoll_evs[i].events, this->rw_buffer, RW_BUFFER_SIZE);
+            this->main_peer->handle_events(this->kq_evs[i].filter, this->kq_evs[i].flags, this->rw_buffer, RW_BUFFER_SIZE);
             if(this->main_peer->should_disconnect)
                 break;
         }
@@ -390,7 +429,7 @@ void Connector::step(int timeout)
         {
             if(this->kq_evs[i].ident==*this->main_peer->get_socket()) //our listen socket
             {
-                if(this->kq_evs[i].filter & EPOLLIN)
+                if(this->kq_evs[i].filter==EVFILT_READ)
                     this->accept_client();
             }
             else //all other clients
@@ -398,7 +437,7 @@ void Connector::step(int timeout)
                 //get peer
                 Peer* peer = this->connections[this->kq_evs[i].ident];
                 peer->handle_secure_accept();
-                peer->handle_events(this->kq_evs[i].filter, this->rw_buffer, RW_BUFFER_SIZE);
+                peer->handle_events(this->kq_evs[i].filter, this->kq_evs[i].flags, this->rw_buffer, RW_BUFFER_SIZE);
 
             }
         }

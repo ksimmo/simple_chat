@@ -5,7 +5,7 @@
 #include <openssl/core_names.h>
 #include <openssl/rand.h>
 
-#include "crypto/crypto.h"
+#include "crypto/utilities.h"
 
 bool dh(Key* priv, Key* pub, std::vector<unsigned char>& secret)
 {
@@ -208,7 +208,7 @@ bool aead_decrypt(std::vector<unsigned char>& key, std::vector<unsigned char>& d
 
 
 //x3dh according to signal protocol
-bool x3dh_alice(std::vector<unsigned char> alice_priv_id, std::vector<unsigned char>& alice_pub_ep, 
+bool x3dh_alice(std::vector<unsigned char>& alice_priv_id, std::vector<unsigned char>& alice_pub_ep, 
                 std::vector<unsigned char>& bob_pub_id, std::vector<unsigned char>& bob_pub_spk, std::vector<unsigned char>& bob_pub_ot,
                 std::vector<unsigned char>& signature, std::string& id_type, std::string& other_type, std::vector<unsigned char>& final_secret)
 {
@@ -388,7 +388,7 @@ bool x3dh_alice(std::vector<unsigned char> alice_priv_id, std::vector<unsigned c
     return true;
 }
 
-bool x3dh_bob(std::vector<unsigned char> bob_priv_id, std::vector<unsigned char>& bob_priv_spk, 
+bool x3dh_bob(std::vector<unsigned char>& bob_priv_id, std::vector<unsigned char>& bob_priv_spk, 
                 std::vector<unsigned char>& bob_priv_ot, std::vector<unsigned char>& alice_pub_id, std::vector<unsigned char>& alice_pub_ep,
                 std::string& id_type, std::string& other_type, std::vector<unsigned char>& final_secret)
 {

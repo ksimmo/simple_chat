@@ -28,7 +28,7 @@ set(NET_SOURCES src/net/socket.cpp
                 src/net/peer.cpp
                 src/net/connector.cpp )
 
-set(CRYPTO_SOURCES src/crypto/key.cpp src/crypto/crypto.cpp)
+set(CRYPTO_SOURCES src/crypto/key.cpp src/crypto/utilities.cpp src/crypto/ratchet.cpp)
 
 set(DB_SOURCES src/db/database.cpp src/db/entry.cpp)
 
@@ -53,7 +53,7 @@ else()
     target_link_libraries(client OpenSSL::SSL OpenSSL::Crypto SQLite::SQLite3 Qt6::Core)
 endif()
 
-set(TESTS test/test_keygen.cpp test/test_x3hd.cpp test/test_aead.cpp)
+set(TESTS test/test_keygen.cpp test/test_x3hd.cpp test/test_aead.cpp test/test_ratchets.cpp)
 foreach(test ${TESTS})
     get_filename_component (TName ${test} NAME_WE)
     add_executable(${TName} ${test} ${NET_SOURCES} ${DB_SOURCES} ${CRYPTO_SOURCES})

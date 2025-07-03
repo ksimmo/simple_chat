@@ -10,13 +10,14 @@ class NetWorker : public QObject
     QOBJECT
 private:
     Connector* connector = nullptr;
+    bool is_active = false;
 public:
     NetWorker(QObject* parent = nullptr, Connector* connector=nullptr);
     ~NetWorker();
 
     void process();
 //public slots:
-    //void connect();
+    void connect(connect(std::string host, int port));
 //signals:
 };
 

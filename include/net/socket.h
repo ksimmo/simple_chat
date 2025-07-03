@@ -11,6 +11,8 @@
 
 #define RW_BUFFER_SIZE 16*1024 //do not make packages too large
 
+void initialize_socket();
+
 enum StatusType {ST_FAIL=-1, ST_INPROGRESS=0, ST_SUCCESS=1}; //we mainly need this due to asynchronous calls may not finish in time
 
 //wrapper class for basic socket operations

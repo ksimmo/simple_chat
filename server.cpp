@@ -54,6 +54,7 @@ int main(int argc, char* argv[])
     db->run_query("CREATE TABLE IF NOT EXISTS messages (name TEXT NOT NULL, key BLOB NOT NULL, date TEXT NOT NULL);", nullptr);
 
     //setup host
+    initialize_socket();
     SSL_CTX* ctx = init_openssl(false, std::string("cert.pem"), std::string("key.pem"));
     connector = new Connector(ctx);
     bool status = connector->initialize(CONN_SERVER, std::string(""), 69100, 1000);

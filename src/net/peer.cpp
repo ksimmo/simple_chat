@@ -97,10 +97,12 @@ void Peer::handle_secure_accept()
     }
 }
 
+#ifdef USE_EPOLL
 void Peer::handle_events(uint32_t evs, char* rw_buffer, int buffer_length)
 {
     if(this->should_disconnect)
         return;
+    
     if(evs & EPOLLERR || evs & EPOLLHUP)
     {
         std::cerr << "[-]Client closed connection!" << std::endl;
@@ -168,6 +170,81 @@ void Peer::handle_events(uint32_t evs, char* rw_buffer, int buffer_length)
         }
     }
 }
+#elif USE_KQUEUE
+void Peer::handle_events(ushort evs, u_short flags, char* rw_buffer, int buffer_length)
+{
+    if(this->should_disconnect)
+        return;
+    
+    //we need to check the flags
+    if(flags & EV_ERROR)
+    {
+        std::cerr << "[-]Client closed connection!" << std::endl;
+        this->should_disconnect = true;
+        return;
+    }
+
+    //we can read
+    if(evs==EVFILT_READ && !this->should_disconnect_clean) //only read if we should not disconnect
+    {
+        if((this->ssl_connected && this->ctx!=nullptr) ||
+            (!this->ssl_connected && this->ctx==nullptr))
+        {
+            //read
+            int result = this->get_socket()->read(rw_buffer, buffer_length);
+            if(result<0)
+            {
+                if(result==-1)
+                {
+                    this->should_disconnect = true;
+                    std::cerr << "[-]Read error!" << std::endl;
+                }
+                return;
+            }
+            else if(result==0)
+            {
+                this->should_disconnect = true;
+            }
+            else
+            {
+                this->buffer_in.append(rw_buffer, result);
+            }
+        }
+    }
+
+    //ok we can write
+    if(evs==EVFILT_WRITE)
+    {
+        if(!this->connected)
+        {
+            //std::cout << "Successfully connected!" << std::endl;
+            this->set_connected();
+            this->events.push(PE_CONNECTED);
+            //return;
+        }
+
+        if((this->ssl_connected && this->ctx!=nullptr) ||
+            (this->connected && this->ctx==nullptr))
+        {
+            //write
+            int result = this->buffer_out.write_packets(rw_buffer, buffer_length);
+            if(result>0)
+            {
+                result = this->sock->write(rw_buffer, result);
+                if(result<0)
+                {
+                    if(result==-1)
+                    {
+                        this->should_disconnect = true;
+                        std::cerr << "[-]Write error!" << std::endl;
+                    }
+                    return;
+                }
+            }
+        }
+    }
+}
+#endif
 
 PeerEvent Peer::pop_event()
 {

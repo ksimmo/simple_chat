@@ -53,7 +53,11 @@ public:
 
     void handle_secure_connect();
     void handle_secure_accept();
+#ifdef USE_EPOLL
     void handle_events(uint32_t evs, char* rw_buffer, int buffer_length);
+#elif USE_KQUEUE
+    void handle_events(ushort evs, u_short flags, char* rw_buffer, int buffer_length);
+#endif
 
     void add_event(PeerEvent ev) { this->events.push(ev); }
     PeerEvent pop_event();
