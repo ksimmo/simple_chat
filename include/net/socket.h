@@ -44,7 +44,7 @@ public:
     bool is_blocking();
     bool set_blocking(bool status);
 
-    StatusType connect(std::string host, int port); //connect to an adress (client)
+    StatusType connect(const std::string& host, int port); //connect to an adress (client)
     bool bind(int port);
     bool listen(int queue_size=SOMAXCONN);
     StatusType accept(Socket* newsock);

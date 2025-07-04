@@ -38,11 +38,13 @@ bool dh(Key* priv, Key* pub, std::vector<unsigned char>& secret)
         return false;
     }
 
+    secret.clear();
     secret.resize(length);
     if(EVP_PKEY_derive(ctx, secret.data(), &length) <= 0)
     {
         std::cerr << "[-] Cannot derive secret: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
         EVP_PKEY_CTX_free(ctx);
+        secret.clear();
         return false;
     }
 
@@ -82,12 +84,14 @@ bool kdf(std::vector<unsigned char>& secret, std::vector<unsigned char>& output,
         return false;
     }
 
+    output.clear();
     output.resize(length);
     if(EVP_KDF_derive(ctx, output.data(), length, nullptr)<=0)
     {
         std::cerr << "[-] Cannot derive kdf: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
         EVP_KDF_free(kdf);
         EVP_KDF_CTX_free(ctx);
+        output.clear();
         return false;
     }
 
@@ -105,6 +109,7 @@ bool create_iv(std::vector<unsigned char>& iv, std::size_t length)
     if(!RAND_bytes(iv.data(), length))
     {
         std::cerr << "[-] Cannot create iv: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+        iv.clear();
         return false;
     }
 
@@ -228,12 +233,9 @@ bool x3dh_alice(std::vector<unsigned char>& alice_priv_id, std::vector<unsigned 
         return false;
     }
 
-    if(!alice_ep->extract_public(alice_pub_ep)) //save public ephemeral key for Bob
-    {
-        delete alice_id;
-        delete alice_ep;
-        return false;
-    }
+    std::vector<unsigned char> temp = alice_ep->get_public();
+    alice_pub_ep.clear();
+    alice_pub_ep.insert(alice_pub_ep.end(), temp.begin(), temp.end());
 
     Key* alice_id_conv = convert_ed25519_to_x25519_private(alice_id); //convert id key to X25519
     if(alice_id_conv==nullptr)

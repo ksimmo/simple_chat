@@ -1,4 +1,6 @@
 #include <iostream>
+#include <chrono>
+#include <thread>
 #include "db/database.h"
 
 Database::Database()
@@ -10,7 +12,7 @@ Database::~Database()
     this->disconnect();
 }
 
-bool Database::connect(std::string name, int flags)
+bool Database::connect(const std::string& name, int flags)
 {
     int status = sqlite3_open_v2(name.c_str(), &this->db, flags, NULL);
     if(status!=SQLITE_OK)
@@ -35,7 +37,7 @@ void Database::disconnect()
     this->values.clear();
 }
 
-bool Database::run_query(std::string query, const char* fmt, ...)
+bool Database::run_query(const std::string& query, const char* fmt, ...)
 {
     //clear data from last query
     this->column_names.clear();
@@ -137,6 +139,7 @@ bool Database::run_query(std::string query, const char* fmt, ...)
     }
 
     //step through data
+    int num_tries = 0; //how often a step fails due to SQL_BUSY
     while(true)
     {
         result = sqlite3_step(stmt);
@@ -192,7 +195,14 @@ bool Database::run_query(std::string query, const char* fmt, ...)
         }
         else if(result==SQLITE_BUSY)
         {
-            //sleep and retry again?
+            if(num_tries>5) //TODO: make this configurable
+                break;
+            else
+            {
+                //sleep and retry again?
+                num_tries += 1;
+                std::this_thread::sleep_for(std::chrono::milliseconds(100)); //sleep for 100ms
+            }
         }
         else
         {
@@ -202,6 +212,9 @@ bool Database::run_query(std::string query, const char* fmt, ...)
         }
             
     }
+
+    if(num_tries>5) //TODO: see above
+        return false;
     
     //finalize
     sqlite3_finalize(stmt);
@@ -209,7 +222,7 @@ bool Database::run_query(std::string query, const char* fmt, ...)
     return true;
 }
 
-bool Database::exists_table(std::string name)
+bool Database::exists_table(const std::string& name)
 {
     std::string query = "SELECT name FROM sqlite_master WHERE type='table' AND name='" + name + "';";
     bool status = this->run_query(query, nullptr);

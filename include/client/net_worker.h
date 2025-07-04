@@ -7,7 +7,6 @@
 
 class NetWorker : public QObject
 {
-    QOBJECT
 private:
     Connector* connector = nullptr;
     bool is_active = false;
@@ -16,9 +15,10 @@ public:
     ~NetWorker();
 
     void process();
-//public slots:
-    void connect(connect(std::string host, int port));
-//signals:
+public slots:
+    void connect(std::string host, int port);
+    void shutdown();
+signals:
 };
 
 #endif

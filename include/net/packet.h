@@ -16,8 +16,10 @@ enum PacketType {PK_EMPTY,                      //Empty
                 PK_USER_SEARCH,                 //provide a string and search for nearest user names
                 PK_USER_KEYS,                   //get user keys to perform secret key exchange
                 PK_UPLOAD_KEYS,                 //the current user sends keys to the server
+                PK_KEY_EXPIRED,                 //if keys are too long on the server-> they will be deleted
                 PK_MSG,                         //A message packet between users
-                PK_MSG_DELIVERY_STATUS          //is the message delivered or read?
+                PK_MSG_DELIVERY_STATUS,         //is the message delivered or read?
+
     };
 
 enum PacketErrors {PK_ERROR_NONE,

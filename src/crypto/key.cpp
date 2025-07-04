@@ -10,7 +10,7 @@ Key::Key()
 {
 }
 
-Key::Key(Key& other, bool public_only)
+Key::Key(const Key& other, bool public_only)
 {
     if(public_only)
         this->create_from_public(other);
@@ -23,10 +23,53 @@ Key::~Key()
     EVP_PKEY_free(this->key);
 }
 
-bool Key::create(std::string& name) //add seed
+bool Key::extract_private()
+{
+    std::size_t length = 0;
+    if(!EVP_PKEY_get_octet_string_param(this->key, OSSL_PKEY_PARAM_PRIV_KEY, nullptr, 0, &length))
+    {
+        std::cerr << "[-] Failed getting private key length: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+        return false;
+    } 
+
+    this->private_key.resize(length);
+    if(!EVP_PKEY_get_octet_string_param(this->key, OSSL_PKEY_PARAM_PRIV_KEY, this->private_key.data(), this->private_key.size(), nullptr))
+    {
+        std::cerr << "[-] Failed getting private key: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+        this->private_key.clear();
+        return false;
+    } 
+
+    return true;
+}
+
+bool Key::extract_public()
+{
+    std::size_t length = 0;
+    if(!EVP_PKEY_get_octet_string_param(this->key, OSSL_PKEY_PARAM_PUB_KEY, nullptr, 0, &length))
+    {
+        std::cerr << "[-] Failed getting private key length: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+        return false;
+    } 
+
+    this->public_key.resize(length);
+    if(!EVP_PKEY_get_octet_string_param(this->key, OSSL_PKEY_PARAM_PUB_KEY, this->public_key.data(), this->public_key.size(), nullptr))
+    {
+        std::cerr << "[-] Failed getting private key: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+        this->public_key.clear();
+        return false;
+    } 
+
+    return true;
+}
+
+bool Key::create(const std::string& name) //add seed
 {
     this->name = name;
     this->is_public = false;
+    this->private_key.clear();
+    this->public_key.clear();
+
     //initialize context
     EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new_from_name(nullptr, name.c_str(), nullptr);
     if(ctx==nullptr)
@@ -82,10 +125,27 @@ bool Key::create(std::string& name) //add seed
         return false;
     }
     EVP_PKEY_CTX_free(ctx);
+
+
+    //extract private and public key
+    if(!this->extract_private())
+    {
+        EVP_PKEY_free(this->key);
+        this->key = nullptr;
+        return false;
+    }
+
+    if(!this->extract_public())
+    {
+        EVP_PKEY_free(this->key);
+        this->key = nullptr;
+        return false;
+    }
+
     return true;
 }
 
-bool Key::create_from_private(std::string& name, std::vector<unsigned char>& data)
+bool Key::create_from_private(const std::string& name, const std::vector<unsigned char>& data)
 {
     if(this->key!=nullptr)
     {
@@ -95,6 +155,9 @@ bool Key::create_from_private(std::string& name, std::vector<unsigned char>& dat
 
     this->name = name;
     this->is_public = false;
+    this->private_key.clear();
+    this->public_key.clear();
+
     //initialize context
     EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new_from_name(nullptr, name.c_str(), nullptr);
     if(ctx==nullptr)
@@ -119,34 +182,27 @@ bool Key::create_from_private(std::string& name, std::vector<unsigned char>& dat
     }
 
     EVP_PKEY_CTX_free(ctx);
-    return true;
-}
 
-bool Key::create_from_public(Key& other)
-{
-    std::vector<unsigned char> data;
-    if(!other.extract_public(data))
+    //extract private key ->we could theoretically also just copy the input here
+    if(!this->extract_private())
+    {
+        EVP_PKEY_free(this->key);
+        this->key = nullptr;
         return false;
-    if(!this->create_from_public(other.name, data))
-        return false;
+    }
 
-    return true;
-}
-
-bool Key::create_from_private(Key& other)
-{
-    if(other.is_public_only())
+    //extract public key
+    if(!this->extract_public())
+    {
+        EVP_PKEY_free(this->key);
+        this->key = nullptr;
         return false;
-    std::vector<unsigned char> data;
-    if(!other.extract_private(data))
-        return false;
-    if(!this->create_from_private(other.name, data))
-        return false;
+    }
 
     return true;
 }
 
-bool Key::create_from_public(std::string& name, std::vector<unsigned char>& data)
+bool Key::create_from_public(const std::string& name, const std::vector<unsigned char>& data)
 {
     if(this->key!=nullptr)
     {
@@ -156,6 +212,9 @@ bool Key::create_from_public(std::string& name, std::vector<unsigned char>& data
 
     this->name = name;
     this->is_public = false;
+    this->private_key.clear();
+    this->public_key.clear();
+
     //initialize context
     EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new_from_name(nullptr, name.c_str(), nullptr);
     if(ctx==nullptr)
@@ -180,58 +239,43 @@ bool Key::create_from_public(std::string& name, std::vector<unsigned char>& data
     }
 
     EVP_PKEY_CTX_free(ctx);
+
+    //extract public key ->we could theoretically also just copy the input here
+    if(!this->extract_public())
+    {
+        EVP_PKEY_free(this->key);
+        this->key = nullptr;
+        return false;
+    }
     return true;
 }
 
-bool Key::extract_private(std::vector<unsigned char>& data)
+bool Key::create_from_public(const Key& other)
 {
-    std::size_t length = 0;
-    if(!EVP_PKEY_get_octet_string_param(this->key, OSSL_PKEY_PARAM_PRIV_KEY, nullptr, 0, &length))
-    {
-        std::cerr << "[-] Failed getting private key length: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+    if(!this->create_from_public(other.name, other.public_key))
         return false;
-    } 
-
-    data.resize(length);
-    if(!EVP_PKEY_get_octet_string_param(this->key, OSSL_PKEY_PARAM_PRIV_KEY, data.data(), data.size(), nullptr))
-    {
-        std::cerr << "[-] Failed getting private key: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
-        return false;
-    } 
 
     return true;
 }
 
-bool Key::extract_public(std::vector<unsigned char>& data)
+bool Key::create_from_private(const Key& other)
 {
-    std::size_t length = 0;
-    if(!EVP_PKEY_get_octet_string_param(this->key, OSSL_PKEY_PARAM_PUB_KEY, nullptr, 0, &length))
-    {
-        std::cerr << "[-] Failed getting private key length: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+    if(other.is_public)
         return false;
-    } 
-
-    data.resize(length);
-    if(!EVP_PKEY_get_octet_string_param(this->key, OSSL_PKEY_PARAM_PUB_KEY, data.data(), data.size(), nullptr))
-    {
-        std::cerr << "[-] Failed getting private key: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+    if(!this->create_from_private(other.name, other.private_key))
         return false;
-    } 
 
     return true;
 }
 
-Key* Key::get_public()
+
+Key* Key::derive_public()
 {
     if(this->key==nullptr)
         return nullptr;
 
-    std::vector<unsigned char> data;
-    if(!this->extract_public(data))
-        return nullptr;
-
     Key* k = new Key();
-    if(!k->create_from_public(this->name, data))
+    if(!k->create_from_public(this->name, this->public_key))
     {
         delete k;
         return nullptr;
@@ -375,110 +419,9 @@ bool Key::decapsulate(std::vector<unsigned char>& cipher, std::vector<unsigned c
 
 
 
-
-///////////////////////////
-/*
-//old code (keep for safety)
-bool Key::create(int id)
-{
-    this->id = id;
-    this->is_public = false;
-    //initialize context
-    EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new_id(this->id, nullptr);
-    if(ctx==nullptr)
-        return false;
-
-    int result = EVP_PKEY_keygen_init(ctx);
-    if(result<=0)
-    {
-        std::cerr << "[-] Cannot initialize key generator: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
-        EVP_PKEY_CTX_free(ctx);
-        return false;
-    }
-
-    result = EVP_PKEY_keygen(ctx, &this->key);
-    if(result<=0)
-    {
-        std::cerr << "[-] Cannot create key: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
-        EVP_PKEY_CTX_free(ctx);
-        return false;
-    }
-    EVP_PKEY_CTX_free(ctx);
-    return true;
-}
-
-bool Key::create_from_private(int id, std::vector<unsigned char>& data)
-{
-    if(this->key!=nullptr)
-        EVP_PKEY_free(this->key);
-
-    this->id = id;
-    this->is_public = false;
-    this->key = EVP_PKEY_new_raw_private_key(id, nullptr, data.data(), data.size());
-    if(this->key==nullptr)
-        std::cerr << "[-] Cannot create private key: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
-    return this->key==nullptr ? false : true;
-}
-
-bool Key::create_from_public(int id, std::vector<unsigned char>& data)
-{
-    if(this->key!=nullptr)
-        EVP_PKEY_free(this->key);
-    this->id = id;
-    this->is_public = true;
-    this->key = EVP_PKEY_new_raw_public_key(id, nullptr, data.data(), data.size());
-    if(this->key==nullptr)
-        std::cerr << "[-] Cannot create public key: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
-    return this->key==nullptr ? false : true;
-}
-
-
-bool Key::extract_private(std::vector<unsigned char>& data)
-{
-    std::size_t length = 0;
-    if(EVP_PKEY_get_raw_private_key(this->key, nullptr, &length)!=1)
-    {
-        std::cerr << "[-] Failed getting private key length: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
-        return false;
-    } 
-
-    data.resize(length);
-    if(EVP_PKEY_get_raw_private_key(this->key, data.data(), &length)!=1)
-    {
-        std::cerr << "[-] Failed getting private key: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
-        return false;
-    } 
-
-    return true;
-}
-
-bool Key::extract_public(std::vector<unsigned char>& data)
-{
-    std::size_t length = 0;
-    if(EVP_PKEY_get_raw_public_key(this->key, nullptr, &length)!=1)
-    {
-        std::cerr << "[-] Failed getting public key length: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
-        return false;
-    } 
-
-    data.resize(length);
-    if(EVP_PKEY_get_raw_public_key(this->key, data.data(), &length)!=1)
-    {
-        std::cerr << "[-] Failed getting public key: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
-        return false;
-    } 
-
-    return true;
-}
-*/
-
-
 Key* convert_ed25519_to_x25519_private(Key* priv)
 {
-    std::vector<unsigned char> data;
-    if(!priv->extract_private(data))
-        return nullptr;
-
+    std::vector<unsigned char> data = priv->get_private();
     std::vector<unsigned char> out;
     out.resize(SHA512_DIGEST_LENGTH);
 
@@ -509,9 +452,7 @@ Key* convert_ed25519_to_x25519_private(Key* priv)
 
 Key* convert_ed25519_to_x25519_public(Key* pub)
 {
-    std::vector<unsigned char> data;
-    if(!pub->extract_public(data))
-        return nullptr;
+    std::vector<unsigned char> data = pub->get_public();
 
     std::vector<unsigned char> out;
     out.resize(data.size());

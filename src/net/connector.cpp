@@ -77,7 +77,7 @@ void Connector::shutdown()
     }
 }
 
-bool Connector::initialize(ConnectorType conn_type, std::string address,int port, int maxevents)
+bool Connector::initialize(ConnectorType conn_type, const std::string& address,int port, int maxevents)
 {
     if(this->is_initialized())
     {

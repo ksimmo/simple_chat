@@ -49,6 +49,7 @@ int main(int argc, char* argv[])
     db->run_query("INSERT INTO users (name, key, key_type, last_login) VALUES(?, ?, ?, ?);", "tbtt", "TestUser2", pub2.size(), pub2.data(), "ED25519", "never");
 
     db->run_query("CREATE TABLE IF NOT EXISTS prekeys (name TEXT NOT NULL UNIQUE, key BLOB NOT NULL, key_type TEXT NOT NULL, signature BLOB NOT NULL, date TEXT NOT NULL);", nullptr);
+    db->run_query("CREATE TABLE IF NOT EXISTS otkeys (name TEXT NOT NULL, key BLOB NOT NULL UNIQUE, key_type TEXT NOT NULL, date TEXT NOT NULL);", nullptr);
 
     //create db for storing undelivered messages
     db->run_query("CREATE TABLE IF NOT EXISTS messages (name TEXT NOT NULL, key BLOB NOT NULL, date TEXT NOT NULL);", nullptr);
@@ -106,6 +107,17 @@ int main(int argc, char* argv[])
                 }
                 case PE_AUTHENTICATED:
                 {
+                    //check if enough OT keys are uploaded
+                    auto entry = users.find(ev.fd);
+                    db->run_query("SELECT date from otkeys WHERE name='"+entry->second->get_name()+"';", nullptr);
+                    std::size_t num_ots = db->values.size();
+                    if(num_ots<10) //we require more ots #TODO: set this via config
+                    {
+                        Packet* newpacket = new Packet(ev.fd, PK_UPLOAD_KEYS);
+                        newpacket->append(10-num_ots);
+                        connector->add_packet(newpacket);
+                    }
+
                     std::cout << "[+]Checking if " << ev.fd << " has undelivered messages!" << std::endl;
                     break;
                 }
@@ -284,11 +296,21 @@ int main(int argc, char* argv[])
                 }
                 else
                 {
-                    std::vector<unsigned char> onetime;
-                    packet->read_buffer(onetime);
-                    std::string type;
-                    packet->read_string(type);
-                    //save
+                    //get date
+                    std::string date = "today"; //TODO: correct!
+                    std::size_t num_keys;
+                    packet->read(num_keys);
+                    for(std::size_t i=0;i<num_keys;i++)
+                    {
+                        std::vector<unsigned char> onetime;
+                        packet->read_buffer(onetime);
+                        std::string type;
+                        packet->read_string(type);
+
+                        //save
+                        db->run_query("INSERT INTO otkeys(name,key,key_type,date) VALUES(?,?,?,?) ON CONFLICT(key) DO NOTHING;",
+                                    "tbtt", user->get_name().c_str(), onetime.size(), onetime.data(), type.c_str(), date.c_str());
+                    }
                 }
                 break;
             }
@@ -327,6 +349,20 @@ int main(int argc, char* argv[])
                 signature.resize(db->values[0][2]->get_length());
                 std::copy(db->values[0][2]->get_data(), db->values[0][2]->get_data()+signature.size(), signature.data());
 
+                //check if user has uploaded onetime-prekeys
+                db->run_query("SELECT key, key_type, date from otkeys WHERE name='"+name+"';", nullptr);
+                std::vector<unsigned char> otkey;
+                std::string ot_type;
+                if(db->values.size()>0) //ok we have a ot key available
+                {
+                    db->values[0][1]->get_string(ot_type); //check if format matches
+                    otkey.resize(db->values[0][0]->get_length());
+                    std::copy(db->values[0][0]->get_data(), db->values[0][0]->get_data()+otkey.size(), otkey.data());
+
+                    //delete otkey from db
+                    db->run_query("DELETE FROM otkeys WHERE key=?", "b", otkey.size(), otkey.data());
+                }
+
                 Packet* newpacket = new Packet(packet->get_fd(), PK_USER_KEYS);
                 newpacket->append_string(name);
                 newpacket->append_buffer(data);
@@ -335,10 +371,10 @@ int main(int argc, char* argv[])
                 newpacket->append_string(prekey_type);
                 newpacket->append_buffer(signature);
 
-                newpacket->append_byte(0); //1 for available onetime prekey
+                newpacket->append_byte(otkey.size()>0); //1 for available onetime prekey
+                if(otkey.size()>0)
+                    newpacket->append_buffer(otkey);
                 connector->add_packet(newpacket);
-
-                //check if user has a one-time prekey available
                 break;
             }
             case PK_MSG:

@@ -2,74 +2,141 @@
 #include "crypto/ratchet.h"
 #include "crypto/utilities.h"
 
-Ratchet::Ratchet(const std::vector<unsigned char>& data) : secret(data)
+KDFChain::KDFChain()
 {
 
 }
 
-Ratchet::~Ratchet()
+KDFChain::KDFChain(const std::vector<unsigned char>& data) : secret(data)
 {
 
+}
+
+KDFChain::~KDFChain()
+{
+
+}
+
+void KDFChain::initialize(const std::vector<unsigned char>& data)
+{
+    this->secret.clear();
+    this->secret.insert(this->secret.end(), data.begin(), data.end());
 }
 
 //turn the ratchet one step
-bool Ratchet::turn(const std::vector<unsigned char>& data)
+bool KDFChain::turn(const std::vector<unsigned char>& data, bool query_iv)
 {
-    //append data to current secret
-    this->secret.insert(this->secret.end(), data.begin(), data.end());
-    std::vector<unsigned char> out; //buffer for getting the kdf output
-    if(!kdf(secret, out, 64))
+    if(this->secret.size()==0)
     {
+        std::cerr << "KDFChain is not initialized!" << std::endl;
+        return false;
+    }
+
+    //append data to current secret
+    std::vector<unsigned char> temp;
+    temp.insert(temp.end(), this->secret.begin(), this->secret.end()); //copy that in case of a fail we have the unaltered secret
+    temp.insert(temp.end(), data.begin(), data.end());
+    std::vector<unsigned char> out; //buffer for getting the kdf output
+    if(!kdf(temp, out, query_iv ? 76: 64)) //NOTE: we assume an iv of 12, however this might change in the future!
+    {
+        std::cerr << "[-]Ratchet turn failed!" << std::endl;
         return false;
     }
 
     this->secret.clear();
-    this->secret.insert(this->secret.end(), out.begin(), out.begin()+32);
+    this->secret.insert(this->secret.end(), out.begin(), out.begin()+32); //set new secret
     this->key.clear();
     this->key.insert(this->key.end(), out.begin()+32, out.begin()+64);
 
     this->iv.clear();
-    this->iv.insert(this->iv.end(), out.begin()+64, out.end());
+    if(query_iv)
+        this->iv.insert(this->iv.end(), out.begin()+64, out.end());
+
+    this->num_turns++;
 
     return true;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////
-RatchetSession::RatchetSession(std::vector<unsigned char>& data, bool is_alice)
+SymmetricRatchet::SymmetricRatchet()
+{
+
+}
+
+SymmetricRatchet::SymmetricRatchet(std::vector<unsigned char>& rootkey, bool is_alice) : root_chain(rootkey)
 {
     this->is_alice = is_alice;
-    this->root_ratchet = new Ratchet(data);
 
     std::vector<unsigned char> temp;
     if(is_alice)
     {
-        this->root_ratchet->turn(temp);
-        this->send_ratchet = new Ratchet(this->root_ratchet->get_key());
-        this->root_ratchet->turn(temp);
-        this->recv_ratchet = new Ratchet(this->root_ratchet->get_key());
+        this->root_chain.turn(temp);
+        this->send_chain.initialize(this->root_chain.get_key());
+        this->root_chain.turn(temp);
+        this->root_chain.initialize(this->root_chain.get_key());
     }
     else //Bob is the other way around
     {
-        this->root_ratchet->turn(temp);
-        this->recv_ratchet = new Ratchet(this->root_ratchet->get_key());
-        this->root_ratchet->turn(temp);
-        this->send_ratchet = new Ratchet(this->root_ratchet->get_key());
+        this->root_chain.turn(temp);
+        this->recv_chain.initialize(this->root_chain.get_key());
+        this->root_chain.turn(temp);
+        this->send_chain.initialize(this->root_chain.get_key());
     }
 }
 
-RatchetSession::~RatchetSession()
+SymmetricRatchet::~SymmetricRatchet()
 {
-    delete this->root_ratchet;
-    delete this->send_ratchet;
-    delete this->recv_ratchet;
+
 }
 
-bool RatchetSession::send()
+bool SymmetricRatchet::send() 
+{ 
+    return this->send_chain.turn(); 
+
+}
+bool SymmetricRatchet::recv() 
 {
-    return this->send_ratchet->turn();
+    return this->recv_chain.turn(); 
 }
 
-bool RatchetSession::recv()
+//////////////////////////////////////////////////////////////
+DoubleRatchet::DoubleRatchet()
 {
-    return this->recv_ratchet->turn();
+    this->key.create("X25519");
+}
+
+DoubleRatchet::DoubleRatchet(const std::vector<unsigned char>& data)
+{
+    this->key.create("X25519");
+    this->root_chain.initialize(data);
+}
+
+DoubleRatchet::~DoubleRatchet()
+{
+
+}
+
+void DoubleRatchet::initialize(const std::vector<unsigned char>& data)
+{
+    
+
+    this->key.create("X25519");
+}
+
+void DoubleRatchet::step_dh(const std::vector<unsigned char>& data, bool query_iv)
+{
+    //perform dh
+    Key bob = Key();
+    bob.create_from_public("X25519", data);
+
+    std::vector<unsigned char> shared_secret;
+    dh(&this->key, &bob, shared_secret);
+
+    this->root_chain.turn(shared_secret, query_iv);
+    this->recv_chain.initialize(this->root_chain.get_key());
+
+    //create new key and perform dh again
+    dh(&this->key, &bob, shared_secret);
+    this->root_chain.turn(shared_secret, query_iv);
+    this->send_chain.initialize(this->root_chain.get_key());
 }

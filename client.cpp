@@ -3,9 +3,11 @@
 #include <signal.h>
 
 #include <QtCore/QCoreApplication>
+#include <QThread>
 #include "net/net.h"
 #include "db/database.h"
 #include "crypto/crypto.h"
+#include "client/net_worker.h"
 
 bool main_loop_run = true;
 
@@ -52,9 +54,15 @@ int main(int argc, char* argv[])
     //table for contacts
     db->run_query("CREATE TABLE IF NOT EXISTS contacts (type TEXT NOT NULL UNIQUE, key BLOB NOT NULL, key_type TEXT NOT NULL, last_online TEXT);", nullptr);
 
-    //Client* client = new Client();
-    //client->initialize("127.0.0.1", 69100, 100, ctx);
     Connector* connector = new Connector(ctx);
+
+    QThread* net_thread = new QThread();
+    NetWorker* net_worker = new NetWorker(nullptr, connector);
+    net_worker->moveToThread(net_thread);
+    //connect signals and slots
+    //connect(...)
+    //net_thread.start();
+
     connector->initialize(CONN_CLIENT, "127.0.0.1", 69100, 100);
 
     while(main_loop_run && connector->is_initialized())
@@ -171,6 +179,7 @@ int main(int argc, char* argv[])
                         //also send onetime prekey
                         Packet* newpacket2 = new Packet(-1, PK_UPLOAD_KEYS);
                         newpacket2->append_byte(0); //signed prekey
+                        newpacket2->append((std::size_t)1); //we could theoretically send more
                         newpacket2->append_buffer(onetime_pub);
                         newpacket2->append_string("X25519");
                         connector->add_packet(newpacket2);
@@ -181,6 +190,13 @@ int main(int argc, char* argv[])
                         newpacket->append_string("TestUser");
                         connector->add_packet(newpacket);
                     }
+                    break;
+                }
+                case PK_UPLOAD_KEYS:
+                {
+                    std::size_t num_keys;
+                    packet->read(num_keys);
+                    std::cout << "Server requested to upload onetime keys: " << num_keys << std::endl; 
                     break;
                 }
                 case PK_USER_KEYS:
@@ -202,12 +218,15 @@ int main(int argc, char* argv[])
                     unsigned char byte;
                     packet->read(byte);
 
+                    std::vector<unsigned char> otkey;
+                    if(byte==1)
+                        packet->read_buffer(otkey);
+
                     if(alice)
                     {
                        std::vector<unsigned char> secret;
                        std::vector<unsigned char> epkey;
-                       std::vector<unsigned char> ot;
-                       x3dh_alice(priv2, epkey, idkey, prekey, ot, signature, id_type, prekey_type, secret);
+                       x3dh_alice(priv2, epkey, idkey, prekey, otkey, signature, id_type, prekey_type, secret);
 
                         std::string temp;
                         for(int i=0;i<secret.size();i++)
@@ -228,12 +247,13 @@ int main(int argc, char* argv[])
                         //generate initial message
                         Packet* newpacket = new Packet(-1, PK_MSG);
                         newpacket->append_string("TestUser");
-                        newpacket->append((std::size_t)0); //message number
+                        newpacket->append_byte(RMT_X3HD); //message number
                         newpacket->append_buffer(pub2);
                         newpacket->append_string(a);
                         newpacket->append_buffer(epkey);
                         newpacket->append_string(prekey_type);
-                        //TODO: notify if and which onetime prekey we have used
+                        newpacket->append_byte(byte); //notify if we have used an ot key
+                        newpacket->append_buffer(otkey);
                         newpacket->append_buffer(iv);
                         newpacket->append_buffer(tag);
                         newpacket->append_buffer(cipher);
@@ -248,11 +268,21 @@ int main(int argc, char* argv[])
                     std::string name;
                     packet->read_string(name);
 
+                    //TODO: check for blacklist
+
                     std::cout << "received message from " << name << " length=" << packet->get_length() << std::endl;
 
-                    std::size_t number;
-                    packet->read(number);
-                    if(number==0) //initial message
+                    unsigned char type;
+                    packet->read(type);
+                    if(type==RMT_UNENCRYPTED)
+                    {
+                        //do nothing
+                    }
+                    else if(type==RMT_ABORT)
+                    {
+                        //close this conversation for ever
+                    }
+                    else if(type==RMT_X3HD) //initial message
                     {
                         //get id key
                         std::vector<unsigned char> idkey;
@@ -268,12 +298,22 @@ int main(int argc, char* argv[])
                         std::string type;
                         packet->read_string(type);
 
-                        //check if a onetime prekey was used
+                        std::vector<unsigned char> otkey;
+                        unsigned char byte;
+                        packet->read(byte);
+
+                        if(byte)
+                        {
+                            packet->read_buffer(otkey);
+                            //check if we have a matching private key
+                            otkey.clear();
+                            //in this test case we have -> TODO: search in db
+                            otkey.insert(otkey.begin(), onetime_priv.begin(), onetime_priv.end());
+                        }
 
 
                         std::vector<unsigned char> secret;
-                        std::vector<unsigned char> ot;
-                        x3dh_bob(priv, prekey_priv, ot, idkey, epkey, idtype, type, secret);
+                        x3dh_bob(priv, prekey_priv, otkey, idkey, epkey, idtype, type, secret);
 
                         std::string temp;
                         for(int i=0;i<secret.size();i++)
@@ -317,8 +357,10 @@ int main(int argc, char* argv[])
                     }
                     else
                     {
-                        //ok perform double ratchet
+                        //ok encrypt message first
                     }
+
+                    //process message
                     break;
                 }
             }
@@ -327,6 +369,12 @@ int main(int argc, char* argv[])
         }
         
     }
+
+    //finish workers
+
+    delete net_worker;
+    delete net_thread;
+
     delete connector;
     delete db;
 

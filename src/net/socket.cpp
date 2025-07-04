@@ -67,7 +67,7 @@ bool Socket::create(int family, int type, int protocol, bool recreate)
 }
 
 //connect socket to address (client)
-StatusType Socket::connect(std::string host, int port)
+StatusType Socket::connect(const std::string& host, int port)
 {
     //only connect if we have a working socket
     if(!this->is_valid())
