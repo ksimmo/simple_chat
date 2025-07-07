@@ -10,6 +10,14 @@ Key::Key()
 {
 }
 
+Key::Key(const std::vector<unsigned char>& data, const std::string& type, bool public_only)
+{
+    if(public_only)
+        this->create_from_public(type, data);
+    else
+        this->create_from_private(type, data);
+}
+
 Key::Key(const Key& other, bool public_only)
 {
     if(public_only)
@@ -286,7 +294,7 @@ Key* Key::derive_public()
 
 
 ///////////////////////////////////
-bool Key::sign_data(std::vector<unsigned char>& data, std::vector<unsigned char>& signed_data)
+bool Key::sign_data(const std::vector<unsigned char>& data, std::vector<unsigned char>& signed_data)
 {
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
     if(ctx==nullptr)
@@ -325,7 +333,7 @@ bool Key::sign_data(std::vector<unsigned char>& data, std::vector<unsigned char>
 
 }
 
-bool Key::verify_signature(std::vector<unsigned char>& data, std::vector<unsigned char>& signed_data)
+bool Key::verify_signature(const std::vector<unsigned char>& data, const std::vector<unsigned char>& signed_data)
 {
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
     if(ctx==nullptr)

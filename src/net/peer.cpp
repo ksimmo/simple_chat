@@ -143,7 +143,6 @@ void Peer::handle_events(uint32_t evs, char* rw_buffer, int buffer_length)
     {
         if(!this->connected)
         {
-            //std::cout << "Successfully connected!" << std::endl;
             this->set_connected();
             this->events.push(PE_CONNECTED);
             //return;

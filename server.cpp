@@ -5,6 +5,8 @@
 #include <mutex>
 
 #include <sqlite3.h>
+#include "logger.h"
+
 #include "net/net.h"
 #include "crypto/crypto.h"
 #include "db/database.h"
@@ -34,6 +36,7 @@ void disconnect_user(int fd)
 
 int main(int argc, char* argv[])
 {
+    Logger& logger = Logger::instance(LogLevel::DEBUG, "server.log");
     signal(SIGINT, &quit_loop);
 
     //for test case (bob, alice)
@@ -90,6 +93,8 @@ int main(int argc, char* argv[])
                 case PE_DISCONNECTED:
                 {
                     auto entry = users.find(ev.fd);
+                    if(entry==users.end()) //check if user exists
+                        break;
 
                     //check if user was logged in
                     if(entry->second->is_verified())
@@ -109,6 +114,8 @@ int main(int argc, char* argv[])
                 {
                     //check if enough OT keys are uploaded
                     auto entry = users.find(ev.fd);
+                    if(entry==users.end()) //check if user exists
+                        break;
                     db->run_query("SELECT date from otkeys WHERE name='"+entry->second->get_name()+"';", nullptr);
                     std::size_t num_ots = db->values.size();
                     if(num_ots<10) //we require more ots #TODO: set this via config

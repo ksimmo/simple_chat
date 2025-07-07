@@ -7,14 +7,17 @@
 #include <cstring>
 #endif
 
+#include "logger.h"
 #include "net/socket.h"
 
 void initialize_socket()
 {
+    Logger& logger = Logger::instance();
 #ifdef WIN32
     WSADATA wsa;
     WSAStartup(MAKEWORD(2, 2), &wsa);
 #endif
+    logger << LogLevel::DEBUG << "Socket library initialized!";
 }
 
 //constructors
@@ -32,7 +35,7 @@ Socket::Socket(int family, int type, int protocol)
 {
     this->fd = socket(family, type, protocol);
     if(this->fd<0)
-        std::cerr << "[-]Cannot create socket: " << strerror(errno) << "(" << errno << ") !" << std::endl;
+        std::cerr << "[-]Cannot create socket: " << strerror(errno) << "(" << errno << ")!" << std::endl;
 }
 
 //desctructor
@@ -59,7 +62,7 @@ bool Socket::create(int family, int type, int protocol, bool recreate)
     bool status = true;
     if(this->fd<0)
     {
-        std::cerr << "[-]Cannot create socket: " << strerror(errno) << "(" << errno << ") !" << std::endl;
+        std::cerr << "[-]Cannot create socket: " << strerror(errno) << "(" << errno << ")!" << std::endl;
         status = false;
     }
 
@@ -91,7 +94,7 @@ StatusType Socket::connect(const std::string& host, int port)
             status = ST_INPROGRESS;
         else
         {
-            std::cerr << "[-]Cannot connect to " << host << ": " << strerror(errno) << "(" << errno << ") !" << std::endl;
+            std::cerr << "[-]Cannot connect to " << host << ": " << strerror(errno) << "(" << errno << ")!" << std::endl;
             status = ST_FAIL; 
         }
     }   
@@ -119,7 +122,7 @@ bool Socket::bind(int port)
     //error handling
     bool status = (result==0);
     if(!status)
-        std::cerr << "[-]Cannot bind to port " << port << ": " << strerror(errno) << "(" << errno << ") !" << std::endl;
+        std::cerr << "[-]Cannot bind to port " << port << ": " << strerror(errno) << "(" << errno << ")!" << std::endl;
     else
         this->port = port;
 
@@ -137,7 +140,7 @@ bool Socket::listen(int queue_size)
 
     bool status = (result==0);
     if(!status)
-        std::cerr << "[-]Cannot listen: " << strerror(errno) << "(" << errno << ") !" << std::endl;
+        std::cerr << "[-]Cannot listen: " << strerror(errno) << "(" << errno << ")!" << std::endl;
 
     return status;
 }
@@ -156,7 +159,7 @@ StatusType Socket::accept(Socket* newsock)
     if(inet_ntop(AF_INET, &client.sin_addr, temp, sizeof(temp))!=nullptr)
         this->address = std::string(temp);
     else
-        std::cerr << "[-]Cannot query clients ip address: " << strerror(errno) << "(" << errno << ") !" << std::endl;
+        std::cerr << "[-]Cannot query clients ip address: " << strerror(errno) << "(" << errno << ")!" << std::endl;
 
     StatusType status = ST_SUCCESS;
     if(result==-1)
@@ -165,7 +168,7 @@ StatusType Socket::accept(Socket* newsock)
             status = ST_INPROGRESS;
         else
         {
-            std::cerr << "[-]Cannot accept client: " << strerror(errno) << "(" << errno << ") !" << std::endl;
+            std::cerr << "[-]Cannot accept client: " << strerror(errno) << "(" << errno << ")!" << std::endl;
             status = ST_FAIL;
         }
     }
@@ -230,7 +233,7 @@ bool Socket::set_blocking(bool status)
     
     bool ret = (result==0);
     if(!ret)
-        std::cerr << "[-]Cannot switch socket behaviour: " << strerror(errno) << "(" << errno << ") !" << std::endl;
+        std::cerr << "[-]Cannot switch socket behaviour: " << strerror(errno) << "(" << errno << ")!" << std::endl;
 
     return ret;
 }
@@ -245,7 +248,7 @@ bool Socket::shutdown(int how)
     bool status = (result==0);
     if(!status)
         if(errno!=ENOTCONN) //ENOTCONN is not that bad as the other side could have closed the connection
-            std::cerr << "[-]Cannot shutdown: " << strerror(errno) << "(" << errno << ") !" << std::endl;
+            std::cerr << "[-]Cannot shutdown: " << strerror(errno) << "(" << errno << ")!" << std::endl;
 
     return status;
 }

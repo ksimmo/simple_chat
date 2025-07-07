@@ -23,6 +23,7 @@ private:
     bool extract_public();
 public:
     Key();
+    Key(const std::vector<unsigned char>& data, const std::string& type, bool only_public=false);
     Key(const Key& other, bool only_public=false);
     ~Key();
 
@@ -41,8 +42,8 @@ public:
     const std::vector<unsigned char>& get_public() { return this->public_key; }
     Key* derive_public();
 
-    bool sign_data(std::vector<unsigned char>& data, std::vector<unsigned char>& signed_data);
-    bool verify_signature(std::vector<unsigned char>& data, std::vector<unsigned char>& signed_data);
+    bool sign_data(const std::vector<unsigned char>& data, std::vector<unsigned char>& signed_data);
+    bool verify_signature(const std::vector<unsigned char>& data, const std::vector<unsigned char>& signed_data);
 
     bool encapsulate(std::vector<unsigned char>& cipher, std::vector<unsigned char>& secret);
     bool decapsulate(std::vector<unsigned char>& cipher, std::vector<unsigned char>& secret);

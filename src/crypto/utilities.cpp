@@ -52,7 +52,7 @@ bool dh(Key* priv, Key* pub, std::vector<unsigned char>& secret)
     return true;
 }
 
-bool kdf(std::vector<unsigned char>& secret, std::vector<unsigned char>& output, std::size_t length)
+bool kdf(const std::vector<unsigned char>& secret, std::vector<unsigned char>& output, std::size_t length)
 {
     EVP_KDF* kdf = EVP_KDF_fetch(nullptr, "HKDF", nullptr);
     if(!kdf)
@@ -71,7 +71,7 @@ bool kdf(std::vector<unsigned char>& secret, std::vector<unsigned char>& output,
 
     OSSL_PARAM params[] = {
         OSSL_PARAM_construct_utf8_string("digest", (char*)"sha256", (std::size_t)6),
-        OSSL_PARAM_construct_octet_string("key", secret.data(), (size_t)secret.size()),
+        OSSL_PARAM_construct_octet_string("key", (void*)secret.data(), (size_t)secret.size()),
         //OSSL_PARAM_construct_octet_string("salt", "salt", (size_t)4),
         //OSSL_PARAM_construct_octet_string("info", "label", (size_t)5),
         OSSL_PARAM_construct_end()
@@ -116,7 +116,7 @@ bool create_iv(std::vector<unsigned char>& iv, std::size_t length)
     return true;
 }
 
-bool aead_encrypt(std::vector<unsigned char>& key, std::vector<unsigned char>& data, std::vector<unsigned char>& cipher, std::vector<unsigned char>& iv, std::vector<unsigned char>& tag)
+bool aead_encrypt(const std::vector<unsigned char>& key, const std::vector<unsigned char>& data, std::vector<unsigned char>& cipher, std::vector<unsigned char>& iv, std::vector<unsigned char>& tag)
 {
     EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
     if(ctx==nullptr)
@@ -164,7 +164,7 @@ bool aead_encrypt(std::vector<unsigned char>& key, std::vector<unsigned char>& d
     return true;
 }
 
-bool aead_decrypt(std::vector<unsigned char>& key, std::vector<unsigned char>& data, std::vector<unsigned char>& cipher, std::vector<unsigned char>& iv, std::vector<unsigned char>& tag)
+bool aead_decrypt(const std::vector<unsigned char>& key, std::vector<unsigned char>& data, const std::vector<unsigned char>& cipher, std::vector<unsigned char>& iv, std::vector<unsigned char>& tag)
 {
     EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
     if(ctx==nullptr)
@@ -213,9 +213,9 @@ bool aead_decrypt(std::vector<unsigned char>& key, std::vector<unsigned char>& d
 
 
 //x3dh according to signal protocol
-bool x3dh_alice(std::vector<unsigned char>& alice_priv_id, std::vector<unsigned char>& alice_pub_ep, 
-                std::vector<unsigned char>& bob_pub_id, std::vector<unsigned char>& bob_pub_spk, std::vector<unsigned char>& bob_pub_ot,
-                std::vector<unsigned char>& signature, std::string& id_type, std::string& other_type, std::vector<unsigned char>& final_secret)
+bool x3dh_alice(const std::vector<unsigned char>& alice_priv_id, std::vector<unsigned char>& alice_pub_ep, 
+                const std::vector<unsigned char>& bob_pub_id, const std::vector<unsigned char>& bob_pub_spk, const std::vector<unsigned char>& bob_pub_ot,
+                const std::vector<unsigned char>& signature, const std::string& id_type, const std::string& other_type, std::vector<unsigned char>& final_secret)
 {
     //create keys (ALICE)
     Key* alice_id = new Key(); //identity key (ed25519)
@@ -390,9 +390,9 @@ bool x3dh_alice(std::vector<unsigned char>& alice_priv_id, std::vector<unsigned 
     return true;
 }
 
-bool x3dh_bob(std::vector<unsigned char>& bob_priv_id, std::vector<unsigned char>& bob_priv_spk, 
-                std::vector<unsigned char>& bob_priv_ot, std::vector<unsigned char>& alice_pub_id, std::vector<unsigned char>& alice_pub_ep,
-                std::string& id_type, std::string& other_type, std::vector<unsigned char>& final_secret)
+bool x3dh_bob(const std::vector<unsigned char>& bob_priv_id, const std::vector<unsigned char>& bob_priv_spk, 
+                const std::vector<unsigned char>& bob_priv_ot, const std::vector<unsigned char>& alice_pub_id, const std::vector<unsigned char>& alice_pub_ep,
+                const std::string& id_type, const std::string& other_type, std::vector<unsigned char>& final_secret)
 {
     //create keys (BOB)
     Key* bob_id = new Key(); //identity key (ED25519)

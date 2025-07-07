@@ -2,6 +2,7 @@
 #define CONNECTOR_H
 
 #include <unordered_map>
+#include <atomic>
 #include <mutex>
 
 #include "net/secure_socket.h"
@@ -24,6 +25,7 @@ private:
     SSL_CTX* ctx = nullptr;
     Peer* main_peer = nullptr; //main socket
     std::unordered_map<int, Peer*> connections; //Server: accepted connections 
+    std::atomic<bool> established;
 
 #ifdef USE_EPOLL
     int epoll_fd = -1;
@@ -48,7 +50,7 @@ public:
     Connector(SSL_CTX* ctx=nullptr);
     ~Connector();
     bool initialize(ConnectorType conn_type, const std::string& address, int port, int maxevents=100);
-    bool is_initialized() { return this->main_peer!=nullptr; }
+    bool is_initialized() { return this->established; } //{ return this->main_peer!=nullptr; }
     bool should_disconnect() { return this->main_peer->should_disconnect; }
     void shutdown();
 

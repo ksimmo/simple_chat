@@ -10,12 +10,10 @@ int main(int argc, char* argv[])
     //if not exists -> create private/public key pair (long term identity key)
     Key* k = new Key();
     k->create(a);
-    std::vector<unsigned char> priv;
-    std::vector<unsigned char> pub;
+    std::vector<unsigned char> priv = k->get_private();
+    std::vector<unsigned char> pub = k->get_public();
     std::cout << "test" << std::endl;
-    k->extract_private(priv);
     std::cout << "test2 " << priv.size() << std::endl;
-    k->extract_public(pub);
     std::cout << "test3 " << pub.size() << std::endl;
     std::string s1 = "";
     std::string s2 = "";
@@ -32,17 +30,13 @@ int main(int argc, char* argv[])
     std::cout << "Private: " << s1 << std::endl;
     std::cout<< "Public: " << s2 << std::endl;
 
-
-    std::vector<unsigned char> priv2;
-    std::vector<unsigned char> pub2;
-
     Key* kk = new Key();
     bool test1 = kk->create_from_private(a, priv);
-    kk->extract_private(priv2);
+    std::vector<unsigned char> priv2 = kk->get_private();
 
     Key* kkk = new Key();
     bool test2 = kkk->create_from_public(a, pub);
-    kkk->extract_public(pub2);
+    std::vector<unsigned char> pub2 = kkk->get_public();
 
     std::cout << "create " << test1 << " " << test2 << std::endl;
 
@@ -96,9 +90,8 @@ int main(int argc, char* argv[])
     a = "ED25519";
     kk->create(a);
 
-    priv.clear(); pub.clear();
-    kk->extract_private(priv);
-    kk->extract_public(pub);
+    priv = kk->get_private();
+    pub = kk->get_public();
 
     s1 = "";
     s2 = "";
@@ -117,9 +110,8 @@ int main(int argc, char* argv[])
     a = "X25519";
     kk->create(a);
 
-    priv.clear(); pub.clear();
-    kk->extract_private(priv);
-    kk->extract_public(pub);
+    priv = kk->get_private();
+    pub = kk->get_public();
 
     s1 = "";
     s2 = "";

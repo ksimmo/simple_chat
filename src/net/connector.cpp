@@ -6,7 +6,7 @@
 
 #include "net/connector.h"
 
-Connector::Connector(SSL_CTX* ctx)
+Connector::Connector(SSL_CTX* ctx) : established(false)
 {
     this->ctx = ctx;
 }
@@ -20,6 +20,8 @@ void Connector::shutdown()
 {
     if(!this->is_initialized())
         return; //nothing to do
+
+    this->established = false;
 
     //disconnect clients (only server)
     for(auto p : this->connections)
@@ -86,6 +88,7 @@ bool Connector::initialize(ConnectorType conn_type, const std::string& address,i
     }
 
     this->type = conn_type;
+    this->established = false;
 
     this->main_peer = new Peer(this->ctx);
 
@@ -191,6 +194,8 @@ bool Connector::initialize(ConnectorType conn_type, const std::string& address,i
 #endif
 
     this->rw_buffer =  new char[RW_BUFFER_SIZE];
+
+    this->established = status;
 
     return status;
 }
@@ -349,6 +354,8 @@ Packet* Connector::pop_packet()
 //main loop
 void Connector::step(int timeout)
 {
+    if(!this->is_initialized())
+        return;
 #ifdef USE_EPOLL
     //check sockets
     int n_fd = epoll_wait(this->epoll_fd, this->epoll_evs, this->epoll_max_events, timeout);
@@ -356,14 +363,13 @@ void Connector::step(int timeout)
     {
         if(errno!=EINTR)
         {
-            std::cerr << "[-]Cannot wait for epoll: " << strerror(errno) << "(" << errno << ") !" << std::endl;
+            std::cerr << "[-]Cannot wait for epoll: " << strerror(errno) << "(" << errno << ")!" << std::endl;
             this->shutdown();
             return;
         }
     }
     else if(n_fd==0)
     {
-        //std::cerr << "[-] Epoll timed out!" << std::endl;
         if(this->type==CONN_CLIENT)
             this->shutdown();
         return;

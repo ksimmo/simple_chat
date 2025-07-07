@@ -9,7 +9,7 @@
 #include <sys/socket.h>
 #endif
 
-#define RW_BUFFER_SIZE 16*1024 //do not make packages too large
+#define RW_BUFFER_SIZE 256*1024 //do not make packages too large
 
 void initialize_socket();
 

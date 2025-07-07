@@ -118,8 +118,6 @@ DoubleRatchet::~DoubleRatchet()
 
 void DoubleRatchet::initialize(const std::vector<unsigned char>& data)
 {
-    
-
     this->key.create("X25519");
 }
 

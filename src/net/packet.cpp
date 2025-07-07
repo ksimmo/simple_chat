@@ -63,7 +63,7 @@ void Packet::append(T t)
 }
 
 //append string
-void Packet::append_string(std::string s)
+void Packet::append_string(const std::string& s)
 {
     std::size_t total_length = s.length()+1;
     this->resize_if_necessary(total_length); //take care of '\0'
@@ -83,7 +83,7 @@ void Packet::append_buffer(void* data, std::size_t length, bool write_size)
     this->write_pos += length;
 }
 
-void Packet::append_buffer(std::vector<unsigned char>& data, bool write_size)
+void Packet::append_buffer(const std::vector<unsigned char>& data, bool write_size)
 {
     if(write_size)
         this->append(data.size());
@@ -139,20 +139,6 @@ void Packet::append_fmt(const char* fmt, ...)
         ++fmt;
     }
     va_end(args);
-}
-
-template<typename T>
-bool Packet::read(T& t)
-{
-    if((this->read_pos+sizeof(t))>this->header->length) //ok object is too large we cannot read it
-        return false;
-
-    std::copy(this->data+this->read_pos+sizeof(PacketHeader), 
-                this->data+this->read_pos+sizeof(PacketHeader)+sizeof(t),
-            (unsigned char*)&t);
-    this->read_pos += sizeof(t);
-
-    return true;
 }
 
 bool Packet::read_string(std::string& s)
@@ -214,12 +200,6 @@ void Packet::read_remaining(std::vector<unsigned char>& data)
         this->read_pos += num;
     }
 }
-
-//register templates
-template bool Packet::read<std::size_t>(std::size_t&);
-template bool Packet::read<int>(int&);
-template bool Packet::read<char>(char&);
-template bool Packet::read<unsigned char>(unsigned char&);
 
 /////////////////////////////////////////////
 //PacketBuffer

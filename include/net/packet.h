@@ -63,23 +63,29 @@ public:
     void append_byte(unsigned char byte);
     template<typename T>
     void append(T t);
-    void append_string(std::string s);
+    void append_string(const std::string& s);
     void append_buffer(void* data, std::size_t length, bool write_size=true);
-    void append_buffer(std::vector<unsigned char>& data, bool write_size=true);
+    void append_buffer(const std::vector<unsigned char>& data, bool write_size=true);
     void append_fmt(const char* fmt, ...); //inspired by ENet & Sauerbraten code ...
 
     bool read_string(std::string &s);
     bool read_raw(void* data, std::size_t length);
     bool read_buffer(std::vector<unsigned char>& data);
     template<typename T>
-    bool read(T& t);
+    bool read(T& t)
+    {
+        if((this->read_pos+sizeof(t))>this->header->length) //ok object is too large we cannot read it
+            return false;
+
+        std::copy(this->data+this->read_pos+sizeof(PacketHeader), 
+                    this->data+this->read_pos+sizeof(PacketHeader)+sizeof(t),
+                (unsigned char*)&t);
+        this->read_pos += sizeof(t);
+
+        return true;
+    }
     void read_remaining(std::vector<unsigned char>& data);
 };
-
-extern template bool Packet::read<std::size_t>(std::size_t&);
-extern template bool Packet::read<int>(int&);
-extern template bool Packet::read<char>(char&);
-extern template bool Packet::read<unsigned char>(unsigned char&);
 
 //a buffer holding unfinished packet bytes and not send packets
 class PacketBuffer

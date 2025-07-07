@@ -5,6 +5,9 @@ project(simple_chat)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
+
 # Find OpenSSL
 find_package(OpenSSL REQUIRED)
 message(STATUS "Using OpenSSL ${OPENSSL_VERSION}")
@@ -32,18 +35,19 @@ set(CRYPTO_SOURCES src/crypto/key.cpp src/crypto/utilities.cpp src/crypto/ratche
 
 set(DB_SOURCES src/db/database.cpp src/db/entry.cpp)
 
+set(OTHER_SOURCES src/logger.cpp)
+
 set(SERVER_SOURCES src/server/user.cpp)
 
-set(CLIENT_SOURCES src/client/net_worker.cpp)
+set(CLIENT_SOURCES src/client/net_worker.cpp include/client/net_worker.h)
 
 # Add server executable
-add_executable(server server.cpp ${NET_SOURCES} ${DB_SOURCES} ${CRYPTO_SOURCES} ${SERVER_SOURCES})
+add_executable(server server.cpp ${NET_SOURCES} ${DB_SOURCES} ${CRYPTO_SOURCES} ${SERVER_SOURCES} ${OTHER_SOURCES})
 
 # Add client executable
-add_executable(client client.cpp ${NET_SOURCES} ${DB_SOURCES}  ${CRYPTO_SOURCES} ${CLIENT_SOURCES})
-
-qt_add_executable(test test.cpp)
-target_link_libraries(test PRIVATE Qt6::Core Qt6::Widgets)
+add_executable(client client.cpp ${NET_SOURCES} ${DB_SOURCES}  ${CRYPTO_SOURCES} ${CLIENT_SOURCES} ${OTHER_SOURCES})
+#set_target_properties(client PROPERTIES AUTOMOC ON)
+#set_target_properties(client PROPERTIES AUTOUI ON)
 
 # Platform-specific settings
 if(WIN32)
@@ -52,13 +56,13 @@ if(WIN32)
 else()
     # On Unix/Linux systems, no special libraries usually needed for sockets
     target_link_libraries(server OpenSSL::SSL OpenSSL::Crypto SQLite::SQLite3)
-    target_link_libraries(client OpenSSL::SSL OpenSSL::Crypto SQLite::SQLite3 Qt6::Core)
+    target_link_libraries(client OpenSSL::SSL OpenSSL::Crypto SQLite::SQLite3 Qt6::Core Qt6::Widgets) 
 endif()
 
 set(TESTS test/test_keygen.cpp test/test_x3hd.cpp test/test_aead.cpp test/test_ratchets.cpp)
 foreach(test ${TESTS})
     get_filename_component (TName ${test} NAME_WE)
-    add_executable(${TName} ${test} ${NET_SOURCES} ${DB_SOURCES} ${CRYPTO_SOURCES})
+    add_executable(${TName} ${test} ${NET_SOURCES} ${DB_SOURCES} ${CRYPTO_SOURCES} ${OTHER_SOURCES})
     target_link_libraries(${TName} OpenSSL::SSL OpenSSL::Crypto SQLite::SQLite3)
 endforeach()
 
