@@ -4,6 +4,7 @@
 #include <cstring>
 #include <sys/epoll.h>
 
+#include "logger.h"
 #include "net/peer.h"
 
 Peer::Peer(SSL_CTX* ctx)
@@ -28,21 +29,16 @@ void Peer::shutdown()
 
 bool Peer::create()
 {
+    Logger& logger = Logger::instance();
     bool status = this->sock->create();
     if(!status)
-    {
-        std::cerr << "[-]Cannot create socket!" << std::endl;
         return status;
-    }
 
     status = this->sock->set_blocking(false);
     if(status)
-        std::cout << "[+]Succesfully set to non-blocking mode!" << std::endl;
+        logger << LogLevel::DEBUG << "[+]Succesfully set to non-blocking mode!" << LogEnd();
     else
-    {
-        std::cerr << "[-]Failed set to non-blocking mode!" << std::endl;
         return status;
-    }
 
     this->connected = false;
     this->ssl_connected = false;

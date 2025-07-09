@@ -138,3 +138,26 @@ void DoubleRatchet::step_dh(const std::vector<unsigned char>& data, bool query_i
     this->root_chain.turn(shared_secret, query_iv);
     this->send_chain.initialize(this->root_chain.get_key());
 }
+
+bool DoubleRatchet::handle_message(unsigned char* msg, std::size_t msg_length, std::vector<unsigned char>& out)
+{
+    std::size_t header_size = sizeof(RatchetHeader);
+    if(msg_length<header_size) //message is too short?
+        return false;
+
+    RatchetHeader* header = (RatchetHeader*)msg;
+
+    switch(header->type)
+    {
+        case RMT_NORMAL: //ok perform normal double ratchet
+        {
+            break;
+        }
+        case RMT_HEADER: //double ratchet with header encrpytion
+        {
+            break;
+        }
+    }
+
+    return true;
+}

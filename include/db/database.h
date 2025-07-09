@@ -5,6 +5,7 @@
 
 #include <string>
 #include <vector>
+#include <mutex>
 
 #include "entry.h"
 
@@ -12,6 +13,7 @@ class Database
 {
 private:
     sqlite3* db;
+    std::mutex mutex;
 
 public:
     Database();
@@ -26,6 +28,11 @@ public:
 
     bool run_query(const std::string& query, const char* fmt, ...);
     bool exists_table(const std::string& name);
+
+    //TODO: this is not good practice, find a better solution
+    //call these before running a query and after processing the queried data only in a multithread usage
+    void lock() { this->mutex.lock(); }
+    void unlock() { this->mutex.unlock(); }
 };
 
 #endif

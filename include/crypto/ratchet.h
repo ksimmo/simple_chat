@@ -5,7 +5,7 @@
 
 enum RatchetMessageTypes {RMT_UNENCRYPTED,      //unencrypted message
                             RMT_ABORT,          //abort protocol
-                            RMT_X3HD,           //performing x3hd
+                            RMT_X3DH,           //performing x3dh
                             RMT_NORMAL,         //normal message
                             RMT_HEADER,         //message with header encryption
                         };
@@ -79,7 +79,7 @@ public:
 
     void initialize(const std::vector<unsigned char>& data);
     void step_dh(const std::vector<unsigned char>& data, bool query_iv=false);
-    //handle_message()
+    bool handle_message(unsigned char* msg, std::size_t msg_length, std::vector<unsigned char>& out);
 };
 
 #endif

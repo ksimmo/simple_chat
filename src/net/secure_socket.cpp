@@ -1,8 +1,10 @@
 #include <iostream>
+#include "logger.h"
 #include "net/secure_socket.h"
 
 SSL_CTX* init_openssl(bool is_client, const std::string& cert, const std::string& key)
 {
+    Logger& logger = Logger::instance();
     SSL_load_error_strings();
     ERR_load_crypto_strings();
     OpenSSL_add_ssl_algorithms();
@@ -15,13 +17,13 @@ SSL_CTX* init_openssl(bool is_client, const std::string& cert, const std::string
         ctx = SSL_CTX_new(TLS_server_method());
     if(!ctx)
     {
-        std::cerr << "[-]Cannot create CTX: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+        logger << LogLevel::ERROR << "Cannot create CTX: " << ERR_error_string(ERR_get_error(), NULL) << LogEnd();
         return nullptr;
     }
     
     if (!SSL_CTX_set_min_proto_version(ctx, TLS1_3_VERSION)) //we want to use TLS v1.3!
     {
-        std::cerr << "[-]Cannot use TLS v1.3: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+        logger << LogLevel::ERROR << "Cannot use TLS v1.3: " << ERR_error_string(ERR_get_error(), NULL) << LogEnd();
         SSL_CTX_free(ctx);
         return nullptr;
     }
@@ -30,7 +32,7 @@ SSL_CTX* init_openssl(bool is_client, const std::string& cert, const std::string
     {
         if (SSL_CTX_use_certificate_file(ctx, "cert.pem", SSL_FILETYPE_PEM) <= 0 ||
             SSL_CTX_use_PrivateKey_file(ctx, "key.pem", SSL_FILETYPE_PEM) <= 0) {
-            std::cerr << "[-]Cannot load cert and key: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+            logger << LogLevel::ERROR << "Cannot load cert and key: " << ERR_error_string(ERR_get_error(), NULL) << LogEnd();
             SSL_CTX_free(ctx);
             return nullptr;
         }
@@ -78,9 +80,10 @@ SecureSocket::~SecureSocket()
 
 StatusType SecureSocket::connect_secure()
 {
+    Logger& logger = Logger::instance();
     if(this->ssl==nullptr)
     {
-        std::cout << "[-]SSL is not available!" << std::endl;
+        logger << LogLevel::WARNING << "SSL is not available!" << LogEnd();
         return ST_FAIL;
     }
     SSL_set_fd(this->ssl, this->fd);
@@ -98,7 +101,7 @@ StatusType SecureSocket::connect_secure()
                 break;
             default:
                 st = ST_FAIL;
-                std::cerr << "[-]SSL handshake failed: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+                logger << LogLevel::ERROR << "SSL handshake failed: " << ERR_error_string(ERR_get_error(), NULL) << LogEnd();
                 break;
         }
     }
@@ -109,9 +112,10 @@ StatusType SecureSocket::connect_secure()
 
 StatusType SecureSocket::accept_secure()
 {
+    Logger& logger = Logger::instance();
     if(this->ssl==nullptr)
     {
-        std::cout << "[-]SSL is not available!" << std::endl;
+        logger << LogLevel::WARNING << "[-]SSL is not available!" << LogEnd();
         return ST_FAIL;
     }
     SSL_set_fd(this->ssl, this->fd);
@@ -129,7 +133,7 @@ StatusType SecureSocket::accept_secure()
                 break;
             default:
                 st = ST_FAIL;
-                std::cerr << "[-]SSL handshake failed: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+                logger << LogLevel::ERROR << "[-]SSL handshake failed: " << ERR_error_string(ERR_get_error(), NULL) << LogEnd();
                 break;
         }
     }

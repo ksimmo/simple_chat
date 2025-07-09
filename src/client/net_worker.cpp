@@ -235,7 +235,7 @@ void NetWorker::process_packets()
                     //generate initial message
                     Packet* newpacket = new Packet(-1, PK_MSG);
                     newpacket->append_string("TestUser");
-                    newpacket->append_byte(RMT_X3HD); //message number
+                    newpacket->append_byte(RMT_X3DH); //message number
                     newpacket->append_buffer(this->key_identity.get_public());
                     newpacket->append_string("ED25519");
                     newpacket->append_buffer(epkey);
@@ -260,17 +260,20 @@ void NetWorker::process_packets()
 
                 std::cout << "received message from " << name << " length=" << packet->get_length() << std::endl;
 
+                //ok check if we need to create a new Ratchet for this user
+
+                std::vector<unsigned char> msg;
                 unsigned char type;
                 packet->read(type);
                 if(type==RMT_UNENCRYPTED)
                 {
-                    //do nothing
+                    packet->read_remaining(msg);
                 }
                 else if(type==RMT_ABORT)
                 {
                     //close this conversation for ever
                 }
-                else if(type==RMT_X3HD) //initial message
+                else if(type==RMT_X3DH) //initial message
                 {
                     //get id key
                     std::vector<unsigned char> idkey;
@@ -340,6 +343,11 @@ void NetWorker::process_packets()
                     if(!is_equal)
                     {
                         //abort creating chat with Alice
+                        Packet* newpacket = new Packet(-1, PK_MSG);
+                        newpacket->append_string("TestUser2");
+                        newpacket->append_byte(RMT_ABORT);
+                        //TODO: maybe append an error message here
+                        connector->add_packet(newpacket);
                     }
 
                 }
@@ -348,7 +356,10 @@ void NetWorker::process_packets()
                     //ok encrypt message first
                 }
 
-                //process message
+                //process message in client
+                if(msg.size()>0)
+                    emit message_received(name, msg);
+
                 break;
             }
         }

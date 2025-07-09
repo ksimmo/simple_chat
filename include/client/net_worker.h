@@ -31,6 +31,7 @@ public slots:
     void stop();
 signals:
     void finished();
+    void message_received(std::string sender, std::vector<unsigned char> data);
 };
 
 #endif

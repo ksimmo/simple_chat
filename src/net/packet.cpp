@@ -94,6 +94,7 @@ void Packet::append_buffer(const std::vector<unsigned char>& data, bool write_si
 }
 
 //append multiple values onto packet (similar to printf)
+//TODO: maybe convert this to more modern C++ variadic templates
 void Packet::append_fmt(const char* fmt, ...)
 {
     va_list args;

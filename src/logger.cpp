@@ -76,3 +76,24 @@ Logger& Logger::operator<<(LogLevel level)
     this->current_level = level;
     return *this;
 }
+
+void Logger::flush()
+{
+    this->output_log(this->log_stream.str()); //ok write or print log
+    this->log_stream.str("");
+    this->log_stream.clear();
+}
+
+/*
+Logger& Logger::operator<<(std::ostream& (*manip)(std::ostream&))
+{
+    if(manip==std::endl)
+        this->flush();
+}
+*/
+
+Logger& Logger::operator<<(const LogEnd& end)
+{
+    this->flush();
+    return *this;
+}

@@ -11,6 +11,15 @@
 
 enum LogLevel {DEBUG, INFO, WARNING, ERROR};
 
+class LogEnd
+{
+private:
+public:
+    LogEnd() = default;
+};
+
+//LogEnd logend;
+
 class Logger
 {
 private:
@@ -21,6 +30,7 @@ private:
     bool log_to_file;
 
     std::ofstream log_file_stream;
+    std::stringstream log_stream;
 
     LogLevel min_level;
     LogLevel current_level;
@@ -42,6 +52,10 @@ public:
     Logger& operator<<(LogLevel level);
     template< typename T>
     Logger& operator<<(const T& message);
+    //Logger& operator<<(std::ostream& (*manip)(std::ostream&)); //std::endl
+    Logger& operator<<(const LogEnd& end);
+
+    void flush();
 };
 
 template <typename T>
@@ -50,10 +64,7 @@ Logger& Logger::operator<<(const T& message)
     if(this->current_level>=this->min_level)
     {
         std::lock_guard<std::mutex> lock(this->mutex);
-        std::stringstream ss;
-        ss << message;
-
-        this->output_log(ss.str());
+        this->log_stream << message;
     }
     return *this;
 }

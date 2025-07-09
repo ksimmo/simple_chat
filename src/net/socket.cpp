@@ -17,7 +17,7 @@ void initialize_socket()
     WSADATA wsa;
     WSAStartup(MAKEWORD(2, 2), &wsa);
 #endif
-    logger << LogLevel::DEBUG << "Socket library initialized!";
+    logger << LogLevel::DEBUG << "Socket library initialized!" << LogEnd();
 }
 
 //constructors
@@ -33,9 +33,12 @@ Socket::Socket(int fd)
 
 Socket::Socket(int family, int type, int protocol)
 {
+    Logger& logger = Logger::instance();
     this->fd = socket(family, type, protocol);
     if(this->fd<0)
-        std::cerr << "[-]Cannot create socket: " << strerror(errno) << "(" << errno << ")!" << std::endl;
+        logger << LogLevel::ERROR << "Cannot create socket: " << strerror(errno) << "(" << errno << ")!" << LogEnd();
+    else
+        logger << LogLevel::DEBUG << "Socket(" << this->fd << ") created successfully!" << LogEnd();
 }
 
 //desctructor
@@ -58,13 +61,16 @@ bool Socket::create(int family, int type, int protocol, bool recreate)
         else
             return true;
     }
+    Logger& logger = Logger::instance();
     this->fd = socket(family, type, protocol);
     bool status = true;
     if(this->fd<0)
     {
-        std::cerr << "[-]Cannot create socket: " << strerror(errno) << "(" << errno << ")!" << std::endl;
+        logger << LogLevel::ERROR << "Cannot create socket: " << strerror(errno) << "(" << errno << ")!" << LogEnd();
         status = false;
     }
+    else
+        logger << LogLevel::DEBUG << "Socket(" << this->fd << ") created successfully!" << LogEnd();
 
     return status;
 }
@@ -88,13 +94,17 @@ StatusType Socket::connect(const std::string& host, int port)
 
     //error handling
     StatusType status = ST_SUCCESS;
+    Logger& logger = Logger::instance();
     if(result==-1)
     {
         if(errno==EINPROGRESS && !this->is_blocking())
+        {
             status = ST_INPROGRESS;
+            logger << LogLevel::ERROR << "Connecting socket(" << this->fd << ") to " << host << " ..." << LogEnd();
+        }
         else
         {
-            std::cerr << "[-]Cannot connect to " << host << ": " << strerror(errno) << "(" << errno << ")!" << std::endl;
+            logger << LogLevel::ERROR << "Cannot connect (" << this->fd << ") to " << host << ": " << strerror(errno) << "(" << errno << ")!" << LogEnd();
             status = ST_FAIL; 
         }
     }   
@@ -120,11 +130,15 @@ bool Socket::bind(int port)
     int result = ::bind(this->fd, (sockaddr*)&address, sizeof(address));
 
     //error handling
+    Logger& logger = Logger::instance();
     bool status = (result==0);
     if(!status)
-        std::cerr << "[-]Cannot bind to port " << port << ": " << strerror(errno) << "(" << errno << ")!" << std::endl;
+        logger << LogLevel::ERROR << "Cannot bind(" << this->fd << ") to port " << port << ": " << strerror(errno) << "(" << errno << ")!" << LogEnd();
     else
+    {
         this->port = port;
+        logger << LogLevel::DEBUG << "Bound (" << this->fd << ") to port " << port << "!" << LogEnd();
+    }
 
     return status;
 }
@@ -138,9 +152,12 @@ bool Socket::listen(int queue_size)
 
     int result = ::listen(this->fd, queue_size);
 
+    Logger& logger = Logger::instance();
     bool status = (result==0);
     if(!status)
-        std::cerr << "[-]Cannot listen: " << strerror(errno) << "(" << errno << ")!" << std::endl;
+        logger << LogLevel::ERROR << "Cannot listen(" << this->fd << "): " << strerror(errno) << "(" << errno << ")!" << LogEnd();
+    else
+        logger << LogLevel::DEBUG << "Listen on " << this->fd << "..." << LogEnd();
 
     return status;
 }
@@ -156,10 +173,11 @@ StatusType Socket::accept(Socket* newsock)
 
     this->port = ntohs(client.sin_port);
     char temp[INET_ADDRSTRLEN];
+    Logger& logger = Logger::instance();
     if(inet_ntop(AF_INET, &client.sin_addr, temp, sizeof(temp))!=nullptr)
         this->address = std::string(temp);
     else
-        std::cerr << "[-]Cannot query clients ip address: " << strerror(errno) << "(" << errno << ")!" << std::endl;
+        logger << LogLevel::ERROR << "Cannot query clients ip address: " << strerror(errno) << "(" << errno << ")!" << LogEnd();
 
     StatusType status = ST_SUCCESS;
     if(result==-1)
@@ -168,7 +186,7 @@ StatusType Socket::accept(Socket* newsock)
             status = ST_INPROGRESS;
         else
         {
-            std::cerr << "[-]Cannot accept client: " << strerror(errno) << "(" << errno << ")!" << std::endl;
+            logger << LogLevel::ERROR << "Cannot accept client: " << strerror(errno) << "(" << errno << ")!" << LogEnd();
             status = ST_FAIL;
         }
     }
@@ -231,9 +249,10 @@ bool Socket::set_blocking(bool status)
         //ok we have a blocking socket and want to set it to non-blocking
         result = fcntl(this->fd, F_SETFL, flags | SOCK_NONBLOCK);
     
+    Logger& logger = Logger::instance();
     bool ret = (result==0);
     if(!ret)
-        std::cerr << "[-]Cannot switch socket behaviour: " << strerror(errno) << "(" << errno << ")!" << std::endl;
+        logger << LogLevel::ERROR << "Cannot switch socket(" << this->fd << ") behaviour: " << strerror(errno) << "(" << errno << ")!" << LogEnd();
 
     return ret;
 }
@@ -245,10 +264,13 @@ bool Socket::shutdown(int how)
 
     int result = ::shutdown(this->fd, how);
 
+    Logger& logger = Logger::instance();
     bool status = (result==0);
     if(!status)
         if(errno!=ENOTCONN) //ENOTCONN is not that bad as the other side could have closed the connection
-            std::cerr << "[-]Cannot shutdown: " << strerror(errno) << "(" << errno << ")!" << std::endl;
+            logger << LogLevel::ERROR << "Cannot shutdown (" << this->fd << "): " << strerror(errno) << "(" << errno << ")!" << LogEnd();
+    else
+        logger << LogLevel::DEBUG << "Shut down (" << this->fd << ") successfully!" << LogEnd();
 
     return status;
 }
