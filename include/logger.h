@@ -35,7 +35,7 @@ private:
     LogLevel min_level;
     LogLevel current_level;
 
-    Logger(LogLevel level, const std::string& logfile, bool log_to_console); //prevent unwanted creation
+    Logger(LogLevel level, const std::string& logfile, bool log_to_console, bool append); //prevent unwanted creation
 
     std::string level_to_string(LogLevel level);
     std::string getTimestamp();
@@ -45,7 +45,7 @@ public:
     Logger& operator=(const Logger&) = delete;
     ~Logger();
 
-    static Logger& instance(LogLevel level=LogLevel::INFO, const std::string& logfile="", bool log_to_console=true);
+    static Logger& instance(LogLevel level=LogLevel::INFO, const std::string& logfile="", bool log_to_console=true, bool append=false);
 
     void setLogLevel(LogLevel new_level) {this->min_level = new_level; }
 

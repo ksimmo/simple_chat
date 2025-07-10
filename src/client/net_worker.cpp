@@ -15,10 +15,21 @@ std::vector<unsigned char> onetime_pub = {171,47,165,177,245,20,57,109,110,195,2
 NetWorker::NetWorker(QObject* parent, Connector* connector, bool is_alice) : connector(connector)
 {
     this->alice = is_alice;
+
+    //load double ratchet information for existing conversations
 }
 
 NetWorker::~NetWorker()
 {
+    //ok update double ratchet information on disk
+
+    //delete
+    for(auto it=this->ratchets.begin();it!=this->ratchets.end();it++)
+    {
+        if(it->second!=nullptr)
+            delete it->second;
+    }
+    this->ratchets.clear();
 }
 
 void NetWorker::process()
@@ -30,13 +41,12 @@ void NetWorker::process()
         if(this->connector->is_initialized())
         {
             this->connector->step(100);
-            this->process_events();
-            this->process_packets();
-            //QThread::msleep(100);
         }
         else
             //wait a bit
             QThread::msleep(100);
+        this->process_events();
+        this->process_packets();
         QCoreApplication::processEvents();
     }
 }
@@ -248,6 +258,10 @@ void NetWorker::process_packets()
                     connector->add_packet(newpacket);
 
                     std::cout << "Sending packet " << newpacket->get_length() << std::endl;
+
+                    //ok create double ratchet
+                    DoubleRatchet* dr = new DoubleRatchet(secret);
+                    this->ratchets.insert(std::make_pair("TestUser", dr));
                 }
                 break;
             }
@@ -260,8 +274,6 @@ void NetWorker::process_packets()
 
                 std::cout << "received message from " << name << " length=" << packet->get_length() << std::endl;
 
-                //ok check if we need to create a new Ratchet for this user
-
                 std::vector<unsigned char> msg;
                 unsigned char type;
                 packet->read(type);
@@ -272,6 +284,7 @@ void NetWorker::process_packets()
                 else if(type==RMT_ABORT)
                 {
                     //close this conversation for ever
+                    //remove ratchet from database and clear current instance
                 }
                 else if(type==RMT_X3DH) //initial message
                 {
@@ -350,10 +363,23 @@ void NetWorker::process_packets()
                         connector->add_packet(newpacket);
                     }
 
+                    //ok create a new Ratchet
+                    DoubleRatchet* dr = new DoubleRatchet(secret);
+                    this->ratchets.insert(std::make_pair(name, dr));
+
                 }
                 else
                 {
                     //ok encrypt message first
+                    auto entry = this->ratchets.find(name);
+                    if(entry!=this->ratchets.end())
+                    {
+                        entry->second->handle_message(type, packet, msg);
+                    }
+                    else
+                    {
+                        //we do not have a valid ratchet for that user -> do handshake first or delete conversation!
+                    }
                 }
 
                 //process message in client

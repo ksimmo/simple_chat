@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <vector>
 #include <string>
+#include <chrono>
 #include <sqlite3.h>
 
 class DBEntry
@@ -20,6 +21,7 @@ public:
     std::size_t get_length() { return this->length; }
     unsigned char* get_data() { return this->buffer; }
     void get_string(std::string& s);
+    void get_time(std::chrono::system_clock::time_point& tp);
 };
 
 #endif

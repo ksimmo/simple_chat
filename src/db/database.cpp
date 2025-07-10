@@ -1,5 +1,8 @@
 #include <iostream>
 #include <chrono>
+#include <ctime>
+#include <sstream>
+#include <iomanip>
 #include <thread>
 #include "db/database.h"
 
@@ -102,7 +105,7 @@ bool Database::run_query(const std::string& query, const char* fmt, ...)
                 }
                 break;
             }
-            case 't': //text
+            case 's': //string
             {
                 const char* c = va_arg(args, const char*);
                 if(sqlite3_bind_text(stmt, index, c, -1, SQLITE_STATIC)!=SQLITE_OK)
@@ -121,6 +124,30 @@ bool Database::run_query(const std::string& query, const char* fmt, ...)
                     std::cerr << "Could not bind blob: " << sqlite3_errmsg(this->db) << " (" << result << ")!" << std::endl;
                     status = false;
                 }
+                break;
+            }
+            case 't': //time
+            {
+                std::chrono::system_clock::time_point* p = (std::chrono::system_clock::time_point*)va_arg(args, void*);
+                
+                std::chrono::system_clock::time_point tp = *p;
+                std::time_t time = std::chrono::system_clock::to_time_t(tp);
+                std::tm tm = *std::gmtime(&time); //we use GMT (alterantive UTC)
+
+                auto duration = tp.time_since_epoch();
+                auto fractional_seconds = duration - std::chrono::duration_cast<std::chrono::seconds>(duration);
+                auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(fractional_seconds).count();
+
+                std::stringstream ss;
+                ss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
+                ss << "." << std::setw(3) << std::setfill('0') << microseconds/1000;
+
+                if(sqlite3_bind_text(stmt, index, ss.str().c_str(), -1, SQLITE_STATIC)!=SQLITE_OK)
+                {
+                    std::cerr << "Could not bind date: " << sqlite3_errmsg(this->db) << " (" << result << ")!" << std::endl;
+                    status = false;
+                }
+
                 break;
             }
             }

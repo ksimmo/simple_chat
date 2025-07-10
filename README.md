@@ -10,7 +10,7 @@ To authenticate a user, a challenge-response procedure is implemented and suppor
 - [ ] Non-Blocking Sockets epoll alternative (eg. kqueue for Apple -> test!, etc.)
 - [ ] Client GUI (QT6)
 - [ ] Add MLS or Double Ratchet E2E encryption
-- [ ] Implement message storage in database
+- [ ] Add message delivery status
 - [ ] Add configuration system
 
 ## Usage

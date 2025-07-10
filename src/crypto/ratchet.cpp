@@ -139,18 +139,29 @@ void DoubleRatchet::step_dh(const std::vector<unsigned char>& data, bool query_i
     this->send_chain.initialize(this->root_chain.get_key());
 }
 
-bool DoubleRatchet::handle_message(unsigned char* msg, std::size_t msg_length, std::vector<unsigned char>& out)
+bool DoubleRatchet::handle_message(unsigned char type, Packet* packet, std::vector<unsigned char>& out)
 {
-    std::size_t header_size = sizeof(RatchetHeader);
-    if(msg_length<header_size) //message is too short?
-        return false;
-
-    RatchetHeader* header = (RatchetHeader*)msg;
-
-    switch(header->type)
+    switch(type)
     {
         case RMT_NORMAL: //ok perform normal double ratchet
         {
+            std::size_t cur_sending_chain;
+            std::size_t prev_sending_chain;
+            packet->read(cur_sending_chain);
+            packet->read(prev_sending_chain);
+
+            //check if a dh step is triggered
+            unsigned char is_dh;
+            packet->read(is_dh);
+            if(is_dh)
+            {
+                std::size_t cur_skipped = prev_sending_chain-this->send_chain.get_turns();
+                //in the new chain -> the skipped messages are cur_sending_chain
+            }
+            else
+            {
+                std::size_t num_skipped = prev_sending_chain-this->send_chain.get_turns();
+            }
             break;
         }
         case RMT_HEADER: //double ratchet with header encrpytion
@@ -160,4 +171,9 @@ bool DoubleRatchet::handle_message(unsigned char* msg, std::size_t msg_length, s
     }
 
     return true;
+}
+
+void DoubleRatchet::send_message(Packet* packet, const std::vector<unsigned char>& msg)
+{
+    
 }

@@ -36,7 +36,7 @@ bool Peer::create()
 
     status = this->sock->set_blocking(false);
     if(status)
-        logger << LogLevel::DEBUG << "[+]Succesfully set to non-blocking mode!" << LogEnd();
+        logger << LogLevel::DEBUG << "Succesfully set to non-blocking mode!" << LogEnd();
     else
         return status;
 
@@ -96,12 +96,13 @@ void Peer::handle_secure_accept()
 #ifdef USE_EPOLL
 void Peer::handle_events(uint32_t evs, char* rw_buffer, int buffer_length)
 {
+    Logger& logger = Logger::instance();
     if(this->should_disconnect)
         return;
     
     if(evs & EPOLLERR || evs & EPOLLHUP)
     {
-        std::cerr << "[-]Client closed connection!" << std::endl;
+        logger << LogLevel::INFO << "Client(" << (int)*this->sock << ") closed connection!" << LogEnd();
         this->should_disconnect = true;
         return;
     }
@@ -119,7 +120,7 @@ void Peer::handle_events(uint32_t evs, char* rw_buffer, int buffer_length)
                 if(result==-1)
                 {
                     this->should_disconnect = true;
-                    std::cerr << "[-]Read error!" << std::endl;
+                    logger << LogLevel::ERROR << "Read error on (" << (int)*this->sock << ")!" << LogEnd();
                 }
                 return;
             }
@@ -157,7 +158,7 @@ void Peer::handle_events(uint32_t evs, char* rw_buffer, int buffer_length)
                     if(result==-1)
                     {
                         this->should_disconnect = true;
-                        std::cerr << "[-]Write error!" << std::endl;
+                        logger << LogLevel::ERROR << "Write error on (" << (int)*this->sock << ")!" << LogEnd();
                     }
                     return;
                 }

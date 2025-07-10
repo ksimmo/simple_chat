@@ -2,6 +2,7 @@
 #define RATCHET_H
 
 #include "key.h"
+#include "net/packet.h"
 
 enum RatchetMessageTypes {RMT_UNENCRYPTED,      //unencrypted message
                             RMT_ABORT,          //abort protocol
@@ -9,15 +10,6 @@ enum RatchetMessageTypes {RMT_UNENCRYPTED,      //unencrypted message
                             RMT_NORMAL,         //normal message
                             RMT_HEADER,         //message with header encryption
                         };
-
-#pragma pack(push, 1) //make sure that the header is the same on all architectures and no padding occurs
-struct RatchetHeader
-{
-    unsigned char type;
-    std::size_t sending_number; //current number in sending chain N
-    std::size_t message_keys; //number of messages in the previous chain PN
-};
-#pragma pack(pop)
 
 //class for a KDF chain
 class KDFChain
@@ -79,7 +71,8 @@ public:
 
     void initialize(const std::vector<unsigned char>& data);
     void step_dh(const std::vector<unsigned char>& data, bool query_iv=false);
-    bool handle_message(unsigned char* msg, std::size_t msg_length, std::vector<unsigned char>& out);
+    bool handle_message(unsigned char type, Packet* packet, std::vector<unsigned char>& out);
+    void send_message(Packet* packet, const std::vector<unsigned char>& msg);
 };
 
 #endif

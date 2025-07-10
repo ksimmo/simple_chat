@@ -5,7 +5,7 @@
 Logger* Logger::instance_pointer = nullptr;
 std::mutex Logger::mutex;
 
-Logger::Logger(LogLevel level, const std::string& logfile, bool log_to_console)
+Logger::Logger(LogLevel level, const std::string& logfile, bool log_to_console, bool append)
 {
     this->min_level = level;
     this->current_level = LogLevel::INFO;
@@ -13,7 +13,10 @@ Logger::Logger(LogLevel level, const std::string& logfile, bool log_to_console)
     
     if(!logfile.empty())
     {
-        this->log_file_stream.open(logfile, std::ios::out | std::ios::app);
+        if(append)
+            this->log_file_stream.open(logfile, std::ios::out | std::ios::app);
+        else
+            this->log_file_stream.open(logfile, std::ios::out);
         this->log_to_file = this->log_file_stream.is_open();
     }
 }
@@ -24,11 +27,11 @@ Logger::~Logger()
         this->log_file_stream.close();
 }
 
-Logger& Logger::instance(LogLevel level, const std::string& logfile, bool log_to_console)
+Logger& Logger::instance(LogLevel level, const std::string& logfile, bool log_to_console, bool append)
 {
     //std::lock_guard<std::mutex> lock(mutex);
     if(instance_pointer==nullptr)
-        instance_pointer = new Logger(level, logfile, log_to_console);
+        instance_pointer = new Logger(level, logfile, log_to_console, append);
     //static std::once_flag initFlag;
     //std::call_once(initFlag, [&]() {
     //        instance_pointer = new Logger(level, logfile, log_to_console);

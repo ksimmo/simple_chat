@@ -77,6 +77,15 @@ void Connector::shutdown()
     {
         this->events.pop();
     }
+    //ok on the client side we still need to add the disconnect event to process
+    if(this->type==CONN_CLIENT)
+    {
+        std::lock_guard<std::mutex> lock(this->mutex);
+        ConnectorEvent temp;
+        temp.fd = -1;
+        temp.ev = PE_DISCONNECTED;
+        this->events.push(temp);
+    }
 }
 
 bool Connector::initialize(ConnectorType conn_type, const std::string& address,int port, int maxevents)

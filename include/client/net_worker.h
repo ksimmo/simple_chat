@@ -18,6 +18,8 @@ private:
     Key key_identity;
     std::string user_name;
 
+    std::unordered_map<std::string, DoubleRatchet*> ratchets;
+
     void process_events();
     void process_packets();
 public:

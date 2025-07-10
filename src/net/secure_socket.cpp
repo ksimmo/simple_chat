@@ -115,7 +115,7 @@ StatusType SecureSocket::accept_secure()
     Logger& logger = Logger::instance();
     if(this->ssl==nullptr)
     {
-        logger << LogLevel::WARNING << "[-]SSL is not available!" << LogEnd();
+        logger << LogLevel::WARNING << "SSL is not available!" << LogEnd();
         return ST_FAIL;
     }
     SSL_set_fd(this->ssl, this->fd);
@@ -133,7 +133,7 @@ StatusType SecureSocket::accept_secure()
                 break;
             default:
                 st = ST_FAIL;
-                logger << LogLevel::ERROR << "[-]SSL handshake failed: " << ERR_error_string(ERR_get_error(), NULL) << LogEnd();
+                logger << LogLevel::ERROR << "SSL handshake failed: " << ERR_error_string(ERR_get_error(), NULL) << LogEnd();
                 break;
         }
     }
