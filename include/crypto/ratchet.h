@@ -7,8 +7,7 @@
 enum RatchetMessageTypes {RMT_UNENCRYPTED,      //unencrypted message
                             RMT_ABORT,          //abort protocol
                             RMT_X3DH,           //performing x3dh
-                            RMT_NORMAL,         //normal message
-                            RMT_HEADER,         //message with header encryption
+                            RMT_MSG,         //normal message
                         };
 
 //class for a KDF chain
@@ -51,28 +50,31 @@ public:
     const std::vector<unsigned char>& get_send_iv() { return this->send_chain.get_iv(); }
     const std::vector<unsigned char>& get_recv_key() { return this->recv_chain.get_key(); }
     const std::vector<unsigned char>& get_recv_iv() { return this->recv_chain.get_iv(); }
+    std::size_t get_send_turns() { return this->send_chain.get_turns(); }
+    std::size_t get_recv_turns() { return this->recv_chain.get_turns(); }
 
     void initialize(const std::vector<unsigned char>& data) { this->root_chain.initialize(data); };
-    bool send();
-    bool recv();
+    bool send(bool query_iv=false);
+    bool recv(bool query_iv=false);
 };
 
 //Double Ratchet
 class DoubleRatchet : public SymmetricRatchet
 {
 private:
-    Key key;
+    Key self_key;
+    Key remote_key;
 public:
     DoubleRatchet();
-    DoubleRatchet(const std::vector<unsigned char>& rootkey);
     ~DoubleRatchet();
 
-    const std::vector<unsigned char>& get_key() { return this->key.get_public(); } //only returns public key!
+    const std::vector<unsigned char>& get_key() { return this->self_key.get_public(); } //only returns public key!
 
-    void initialize(const std::vector<unsigned char>& data);
-    void step_dh(const std::vector<unsigned char>& data, bool query_iv=false);
-    bool handle_message(unsigned char type, Packet* packet, std::vector<unsigned char>& out);
-    void send_message(Packet* packet, const std::vector<unsigned char>& msg);
+    bool initialize_alice(const std::vector<unsigned char>& rootkey, const std::vector<unsigned char>& pubkey);
+    bool initialize_bob(const std::vector<unsigned char>& rootkey, const std::vector<unsigned char>& privkey);
+    bool step_dh(const std::vector<unsigned char>& pubkey);
+    bool receive_message(Packet* packet, std::vector<unsigned char>& out);
+    bool send_message(Packet* packet, const std::vector<unsigned char>& msg);
 };
 
 #endif

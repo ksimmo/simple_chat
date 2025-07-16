@@ -27,7 +27,8 @@ enum PacketErrors {PK_ERROR_NONE,
                     PK_ERROR_SERVER,              //error occured on server side
                     PK_ERROR_UNREGISTERED,       //User is not registered
                     PK_ERROR_AUTH,                  //Authentification failed
-                    PK_ERROR_USER                   //User does not exists
+                    PK_ERROR_USER ,                  //User does not exists
+                    PK_ERROR_PARSE                  //packet is missing information
                 };
 
 #pragma pack(push, 1) //make sure that the header is the same on all architectures and no padding occurs

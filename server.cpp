@@ -144,13 +144,17 @@ int main(int argc, char* argv[])
         Packet* packet = connector->pop_packet();
         while(packet!=nullptr)
         {
+            bool parse_error = false; //set this to true if parsing a packet fails
+
             switch(packet->get_type())
             {
             case PK_LOGIN:
             {
                 std::cout << "[+]Login attempt received from " << packet->get_fd() << "!" << std::endl;
                 std::string s;
-                packet->read_string(s);
+                parse_error = !packet->read_string(s);
+                if(parse_error)
+                    break;
 
                 //check if user exists
                 db->run_query("SELECT key, key_type from users WHERE name='"+s+"';", nullptr);
@@ -207,9 +211,11 @@ int main(int argc, char* argv[])
                 User* user = users[packet->get_fd()];
                 std::cout << "[+] Received signed challenge from " << packet->get_fd() << std::endl;
                 std::vector<unsigned char> signed_challenge;
-                bool status = packet->read_buffer(signed_challenge);
+                parse_error = !packet->read_buffer(signed_challenge);
+                if(parse_error)
+                    break;
 
-                status = user->check_challenge(signed_challenge);
+                bool status = user->check_challenge(signed_challenge);
                 std::cout << "[+]Challenge status: " << status << std::endl;
                 if(!status)
                 {
@@ -239,7 +245,9 @@ int main(int argc, char* argv[])
                     break;
                 }
                 std::string query;
-                packet->read_string(query);
+                parse_error = !packet->read_string(query);
+                if(parse_error)
+                    break;
 
                 //TODO: allow more flexible user search
                 db->run_query("SELECT DISTINCT name from users WHERE LOWER(name) LIKE LOWER('"+query+"%') LIMIT 10;", nullptr);
@@ -264,7 +272,10 @@ int main(int argc, char* argv[])
                     break;
                 }
                 std::string name;
-                packet->read_string(name);
+                parse_error = !packet->read_string(name);
+                if(parse_error)
+                    break;
+
                 db->run_query("SELECT key from users WHERE name='"+name+"';", nullptr);
                 if(db->values.size()==0)
                 {
@@ -292,15 +303,19 @@ int main(int argc, char* argv[])
                     break;
                 }
                 unsigned char byte;
-                packet->read(byte);
+                parse_error = !packet->read(byte);
+                if(parse_error)
+                    break;
                 if(byte)
                 {
                     std::vector<unsigned char> prekey;
                     std::vector<unsigned char> signature;
                     std::string type;
-                    packet->read_buffer(prekey);
-                    packet->read_string(type);
-                    packet->read_buffer(signature);
+                    parse_error |= !packet->read_buffer(prekey);
+                    parse_error |= !packet->read_string(type);
+                    parse_error |= !packet->read_buffer(signature);
+                    if(parse_error)
+                        break;
 
                     //get date
                     std::chrono::system_clock::time_point tp = std::chrono::system_clock::now();
@@ -318,9 +333,11 @@ int main(int argc, char* argv[])
                     for(std::size_t i=0;i<num_keys;i++)
                     {
                         std::vector<unsigned char> onetime;
-                        packet->read_buffer(onetime);
+                        parse_error |= !packet->read_buffer(onetime);
                         std::string type;
-                        packet->read_string(type);
+                        parse_error |= !packet->read_string(type);
+                        if(parse_error)
+                            break;
 
                         //save
                         db->run_query("INSERT INTO otkeys(name,key,key_type,date) VALUES(?,?,?,?) ON CONFLICT(key) DO NOTHING;",
@@ -332,7 +349,9 @@ int main(int argc, char* argv[])
             case PK_USER_KEYS:
             {
                 std::string name;
-                packet->read_string(name);
+                parse_error = !packet->read_string(name);
+                if(parse_error)
+                    break;
                 db->run_query("SELECT key, key_type from users WHERE name='"+name+"';", nullptr);
                 if(db->values.size()==0)
                 {
@@ -400,7 +419,9 @@ int main(int argc, char* argv[])
                     break;
                 }
                 std::string name;
-                packet->read_string(name);
+                parse_error = !packet->read_string(name);
+                if(parse_error)
+                    break;
                 //check if user exists
                 db->run_query("SELECT key from users WHERE name='"+name+"';", nullptr);
                 if(db->values.size()==0)
@@ -445,6 +466,14 @@ int main(int argc, char* argv[])
             }
             }
 
+            if(parse_error)
+            {
+                std::cout << "Parsing Error detected!" << std::endl;
+                Packet* newpacket = new Packet(packet->get_fd(), PK_ERROR);
+                newpacket->append((int)PK_ERROR_PARSE);
+                connector->add_packet(newpacket);
+            }
+
             delete packet;
             packet = connector->pop_packet();
         }
@@ -464,7 +493,7 @@ int main(int argc, char* argv[])
             }
         }
 
-        //check for undelivered messages beeing too -> delete
+        //check for undelivered messages beeing too old -> delete
 
         //maybe wait here a few milliseconds
     }

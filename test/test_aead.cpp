@@ -37,12 +37,10 @@ int main(int argc, char* argv[])
         return -1;
     }
 
-    std::vector<unsigned char> tag;
-
-    aead_encrypt(key, plain, cipher, iv, tag);
+    aead_encrypt(key, plain, cipher, iv);
 
     plain.clear();
-    aead_decrypt(key, plain, cipher, iv, tag);
+    aead_decrypt(key, plain, cipher, iv);
 
     for(int i=0;i<plain.size();i++)
         s2 += std::to_string((int)plain[i])+",";

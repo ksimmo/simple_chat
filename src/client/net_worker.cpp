@@ -21,11 +21,11 @@ NetWorker::NetWorker(QObject* parent, Connector* connector, bool is_alice) : con
 
 NetWorker::~NetWorker()
 {
-    //ok update double ratchet information on disk
-
     //delete
     for(auto it=this->ratchets.begin();it!=this->ratchets.end();it++)
     {
+        //ok update double ratchet information on disk
+        
         if(it->second!=nullptr)
             delete it->second;
     }
@@ -231,15 +231,20 @@ void NetWorker::process_packets()
                         temp += std::to_string((int)secret[i])+",";
                     std::cout << temp << std::endl;
 
+                    //ok create double ratchet
+                    DoubleRatchet* dr = new DoubleRatchet();
+                    dr->initialize_alice(secret, prekey);
+                    //encrypt initial message
+                    this->ratchets.insert(std::make_pair("TestUser", dr)); //currently only 1to1 messages are supported (no groups)
+
                     //use AEAD scheme to encrypt both identity keys to 
                     std::vector<unsigned char> comb;
                     comb.insert(comb.end(), this->key_identity.get_public().begin(), this->key_identity.get_public().end()); //id pub alice
                     comb.insert(comb.end(), idkey.begin(), idkey.end()); //id pub bob
                     std::vector<unsigned char> iv;
                     create_iv(iv);
-                    std::vector<unsigned char> tag;
                     std::vector<unsigned char> cipher;
-                    aead_encrypt(secret, comb, cipher, iv, tag);
+                    aead_encrypt(secret, comb, cipher, iv);
 
                     
                     //generate initial message
@@ -253,15 +258,11 @@ void NetWorker::process_packets()
                     newpacket->append_byte(byte); //notify if we have used an ot key
                     newpacket->append_buffer(otkey);
                     newpacket->append_buffer(iv);
-                    newpacket->append_buffer(tag);
+                    //TODO: add dh ratchet key here!
                     newpacket->append_buffer(cipher);
                     connector->add_packet(newpacket);
 
                     std::cout << "Sending packet " << newpacket->get_length() << std::endl;
-
-                    //ok create double ratchet
-                    DoubleRatchet* dr = new DoubleRatchet(secret);
-                    this->ratchets.insert(std::make_pair("TestUser", dr));
                 }
                 break;
             }
@@ -327,14 +328,12 @@ void NetWorker::process_packets()
                     //use secret to decrypt initial message and verify if public keys match
                     std::vector<unsigned char> iv;
                     packet->read_buffer(iv);
-                    std::vector<unsigned char> tag;
-                    packet->read_buffer(tag);
 
                     std::vector<unsigned char> cipher;
                     packet->read_buffer(cipher);
 
                     std::vector<unsigned char> plain;
-                    aead_decrypt(secret, plain, cipher, iv, tag);
+                    aead_decrypt(secret, plain, cipher, iv);
 
                     //check if we got the secret right
                     std::vector<unsigned char> comb;
@@ -364,7 +363,10 @@ void NetWorker::process_packets()
                     }
 
                     //ok create a new Ratchet
-                    DoubleRatchet* dr = new DoubleRatchet(secret);
+                    DoubleRatchet* dr = new DoubleRatchet();
+                    dr->initialize_bob(secret, prekey_priv);
+                    //directly perform first ratchet step to receive messages from alice
+                    //dr->receive_message(packet, out_comb);
                     this->ratchets.insert(std::make_pair(name, dr));
 
                 }
@@ -374,7 +376,7 @@ void NetWorker::process_packets()
                     auto entry = this->ratchets.find(name);
                     if(entry!=this->ratchets.end())
                     {
-                        entry->second->handle_message(type, packet, msg);
+                        //entry->second->handle_message(type, packet, msg);
                     }
                     else
                     {

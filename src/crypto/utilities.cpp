@@ -52,7 +52,7 @@ bool dh(Key* priv, Key* pub, std::vector<unsigned char>& secret)
     return true;
 }
 
-bool kdf(const std::vector<unsigned char>& secret, std::vector<unsigned char>& output, std::size_t length)
+bool kdf(const std::vector<unsigned char>& secret, std::vector<unsigned char>& output, std::size_t length, const std::vector<unsigned char>& salt, const std::vector<unsigned char>& info)
 {
     EVP_KDF* kdf = EVP_KDF_fetch(nullptr, "HKDF", nullptr);
     if(!kdf)
@@ -69,15 +69,25 @@ bool kdf(const std::vector<unsigned char>& secret, std::vector<unsigned char>& o
         return false;
     }
 
+    std::vector<OSSL_PARAM> params;
+    params.push_back(OSSL_PARAM_construct_utf8_string("digest", (char*)"sha256", (std::size_t)6));
+    params.push_back(OSSL_PARAM_construct_octet_string("key", (void*)secret.data(), secret.size()));
+    if(salt.size()>0)
+        params.push_back(OSSL_PARAM_construct_octet_string("salt", (void*)salt.data(), salt.size()));
+    if(info.size()>0)
+        params.push_back(OSSL_PARAM_construct_octet_string("info", (void*)info.data(), info.size()));
+    params.push_back(OSSL_PARAM_construct_end());
+    /*
     OSSL_PARAM params[] = {
         OSSL_PARAM_construct_utf8_string("digest", (char*)"sha256", (std::size_t)6),
-        OSSL_PARAM_construct_octet_string("key", (void*)secret.data(), (size_t)secret.size()),
-        //OSSL_PARAM_construct_octet_string("salt", "salt", (size_t)4),
-        //OSSL_PARAM_construct_octet_string("info", "label", (size_t)5),
+        OSSL_PARAM_construct_octet_string("key", (void*)secret.data(), secret.size()),
+        //OSSL_PARAM_construct_octet_string("salt", (void*)salt.data(), salt.size()),
+        //OSSL_PARAM_construct_octet_string("info", (void*)info.data(), info.size()),
         OSSL_PARAM_construct_end()
     };
+    */
 
-    if(EVP_KDF_CTX_set_params(ctx, params) <= 0) {
+    if(EVP_KDF_CTX_set_params(ctx, params.data()) <= 0) {
         std::cerr << "[-] Failed setting ctx params: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
         EVP_KDF_free(kdf);
         EVP_KDF_CTX_free(ctx);
@@ -105,7 +115,7 @@ bool kdf(const std::vector<unsigned char>& secret, std::vector<unsigned char>& o
 //AEAD
 bool create_iv(std::vector<unsigned char>& iv, std::size_t length)
 {
-    iv.resize(12);
+    iv.resize(length); //12 or 16 depending on mode (gcm vs cbc)
     if(!RAND_bytes(iv.data(), length))
     {
         std::cerr << "[-] Cannot create iv: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
@@ -116,7 +126,7 @@ bool create_iv(std::vector<unsigned char>& iv, std::size_t length)
     return true;
 }
 
-bool aead_encrypt(const std::vector<unsigned char>& key, const std::vector<unsigned char>& data, std::vector<unsigned char>& cipher, std::vector<unsigned char>& iv, std::vector<unsigned char>& tag)
+bool aead_encrypt(const std::vector<unsigned char>& key, const std::vector<unsigned char>& data, std::vector<unsigned char>& cipher, const std::vector<unsigned char>& iv) //, std::vector<unsigned char>& tag)
 {
     EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
     if(ctx==nullptr)
@@ -125,7 +135,7 @@ bool aead_encrypt(const std::vector<unsigned char>& key, const std::vector<unsig
         return false;
     }
 
-    if(EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), nullptr, key.data(), iv.data())!=1)
+    if(EVP_EncryptInit_ex(ctx, EVP_aes_256_cbc(), nullptr, key.data(), iv.data())!=1) //EVP_aes_256_gcm()
     {
         std::cerr << "[-] Cannot initialize encrpytion: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
         EVP_CIPHER_CTX_free(ctx);
@@ -151,20 +161,21 @@ bool aead_encrypt(const std::vector<unsigned char>& key, const std::vector<unsig
     cipher_length += length;
     cipher.resize(cipher_length);
 
+    /*
     tag.resize(16);
     if(1 != EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, 16, tag.data()))
     {
         std::cerr << "[-] Cannot set tag: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
         EVP_CIPHER_CTX_free(ctx);
         return false;
-    }
+    }*/
 
     EVP_CIPHER_CTX_free(ctx);
 
     return true;
 }
 
-bool aead_decrypt(const std::vector<unsigned char>& key, std::vector<unsigned char>& data, const std::vector<unsigned char>& cipher, std::vector<unsigned char>& iv, std::vector<unsigned char>& tag)
+bool aead_decrypt(const std::vector<unsigned char>& key, std::vector<unsigned char>& data, const std::vector<unsigned char>& cipher, const std::vector<unsigned char>& iv) //, std::vector<unsigned char>& tag)
 {
     EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
     if(ctx==nullptr)
@@ -173,19 +184,20 @@ bool aead_decrypt(const std::vector<unsigned char>& key, std::vector<unsigned ch
         return false;
     }
 
-    if(EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), nullptr, key.data(), iv.data())!=1)
+    if(EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), nullptr, key.data(), iv.data())!=1) //EVP_aes_256_gcm()
     {
         std::cerr << "[-] Cannot initialize decrpytion: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
         EVP_CIPHER_CTX_free(ctx);
         return false;
     }
 
+    /*
     if(EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, 16, tag.data())!=1)
     {
         std::cerr << "[-] Cannot set tag: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
         EVP_CIPHER_CTX_free(ctx);
         return false;
-    }
+    }*/
 
     data.resize(cipher.size());
     int data_length = data.size();
