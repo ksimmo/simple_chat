@@ -258,7 +258,7 @@ void NetWorker::process_packets()
                     newpacket->append_byte(byte); //notify if we have used an ot key
                     newpacket->append_buffer(otkey);
                     newpacket->append_buffer(iv);
-                    //TODO: add dh ratchet key here!
+                    //TODO: add dh ratchet key here! (but encrypt using secret!)
                     newpacket->append_buffer(cipher);
                     connector->add_packet(newpacket);
 

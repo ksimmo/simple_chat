@@ -1,6 +1,8 @@
 #ifndef RATCHET_H
 #define RATCHET_H
 
+#include <unordered_map>
+
 #include "key.h"
 #include "net/packet.h"
 
@@ -62,10 +64,18 @@ public:
 class DoubleRatchet : public SymmetricRatchet
 {
 private:
+    std::size_t max_skip;
     Key self_key;
     Key remote_key;
+
+    std::size_t old_turns = 0;
+    //keys are dh key and N and we store message key and
+    std::unordered_map<std::pair<std::vector<unsigned char>, std::size_t>, std::pair<std::vector<unsigned char>,std::vector<unsigned char>>> skipped_keys;
+
+    bool check_skipped_keys(const std::vector<unsigned char>& key, std::size_t n, const std::vector<unsigned char>& cipher, std::vector<unsigned char>& out);
+    bool skip_keys(std::size_t n);
 public:
-    DoubleRatchet();
+    DoubleRatchet(std::size_t max_skip=1000);
     ~DoubleRatchet();
 
     const std::vector<unsigned char>& get_key() { return this->self_key.get_public(); } //only returns public key!
