@@ -449,11 +449,19 @@ int main(int argc, char* argv[])
                 else
                 {
                     //store message
+                    //TODO: set an upper limit of messages
                     std::chrono::system_clock::time_point tp = std::chrono::system_clock::now();
                     db->run_query("INSERT INTO messages (receiver,sender,date,msg) VALUES(?,?,?,?);", "sstb",
                             name.c_str(), user->get_name().c_str(), &tp, msg_data.size(), msg_data.data());
+
+                    //TODO: send delivery status
                 }
 
+                break;
+            }
+            case PK_MSG_DELIVERY_STATUS:
+            {
+                //TODO: forward status
                 break;
             }
             default:

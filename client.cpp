@@ -51,7 +51,7 @@ int main(int argc, char* argv[])
     Connector* connector = new Connector(ctx);
 
     QThread* net_thread = new QThread();
-    NetWorker* net_worker = new NetWorker(nullptr, connector, alice);
+    NetWorker* net_worker = new NetWorker(nullptr, connector, db, alice);
     net_worker->moveToThread(net_thread);
     //connect signals and slots
     //thread related ...

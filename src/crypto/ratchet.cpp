@@ -148,7 +148,7 @@ bool DoubleRatchet::initialize_bob(const std::vector<unsigned char>& rootkey, co
 bool DoubleRatchet::step_dh(const std::vector<unsigned char>& pubkey)
 {
     this->old_turns = this->get_send_turns(); //save state of current sending chain
-    this->remote_key.create_from_public("X25519", pubkey); //generate new key
+    this->remote_key.create_from_public("X25519", pubkey); //generate key from received data
 
     //do dh exchange
     std::vector<unsigned char> shared_secret;
@@ -168,7 +168,12 @@ bool DoubleRatchet::step_dh(const std::vector<unsigned char>& pubkey)
 
 bool DoubleRatchet::check_skipped_keys(const std::vector<unsigned char>& key, std::size_t n, const std::vector<unsigned char>& cipher, std::vector<unsigned char>& out)
 {
-    auto entry = this->skipped_keys.find(std::make_pair(key, n));
+    //convert key
+    std::string temp;
+    temp.insert(temp.end(), (char*)key.data(), (char*)key.data()+key.size());
+    temp.insert(temp.end(), (char*)&n, (char*)(&n+sizeof(std::size_t)));
+
+    auto entry = this->skipped_keys.find(temp);
     if(entry!=this->skipped_keys.end()) //jup there is a key saved
     {
         //decode
@@ -182,14 +187,22 @@ bool DoubleRatchet::check_skipped_keys(const std::vector<unsigned char>& key, st
 
 bool DoubleRatchet::skip_keys(std::size_t until)
 {
-    if(this->get_recv_turns();+this->max_skip<until) //ok we skipped to much messages
+    if(!this->recv_chain.is_initialized()) //if chain is not initialized we cannot skip keys! (only happens once when Bob creates DR object)
+        return false;
+
+    if(this->get_recv_turns()+this->max_skip<until) //ok we skipped to much messages
         return false;
 
     while (this->get_recv_turns()<until)
     {
         this->recv(true);
         //save key for later usage
-        //this->skipped_keys.insert(std::make_pair(std::make_pair(this->remote_key, this->get_recv_turns()), std::make_pair(this->get_recv_key(), this->get_recv_iv())));
+        std::string first;
+        first.insert(first.end(), (char*)this->remote_key.get_public().data(), (char*)this->remote_key.get_public().data()+this->remote_key.get_public().size());
+        std::size_t n = this->get_recv_turns();
+        first.insert(first.end(), (char*)&n, (char*)(&n+sizeof(std::size_t)));
+
+        this->skipped_keys.insert(std::make_pair(first, std::make_pair(this->get_recv_key(), this->get_recv_iv())));
     }
     
     return true;
@@ -204,8 +217,6 @@ bool DoubleRatchet::receive_message(Packet* packet, std::vector<unsigned char>& 
     std::size_t pn;
     status |= !packet->read(n);
     status |= !packet->read(pn);
-    unsigned char contains_key;
-    status |= !packet->read(contains_key);
     
     std::vector<unsigned char> cipher;
     status |= !packet->read_buffer(cipher);
@@ -219,15 +230,7 @@ bool DoubleRatchet::receive_message(Packet* packet, std::vector<unsigned char>& 
         return true;
 
     //check if the key matches current used remote dh key
-    bool is_key_new = false;
-    for(auto i=0;i<key.size();i++)
-    {
-        if(key[i]!=this->remote_key.get_public()[i])
-        {
-            is_key_new = true;
-            break;
-        }
-    }
+    bool is_key_new = (key!=this->remote_key.get_public());
 
     if(is_key_new)
     {
@@ -258,10 +261,8 @@ bool DoubleRatchet::send_message(Packet* packet, const std::vector<unsigned char
     //create packet (we assume the raw, empty packet is created outside this function and already contains receiver)
     packet->append_byte(RMT_MSG);
     packet->append_buffer(this->self_key.get_public()); //always append current dh public key
-    packet->append((std::size_t)this->get_send_turns());
+    packet->append((std::size_t)this->get_send_turns()-1); //subtract 1 as we already increased the counter
     packet->append((std::size_t)this->old_turns);
-    //TODO: check if we need to send our key to initiate a new dh ratchet step
-    packet->append_byte(0); //does this message contain a dh key?
     packet->append_buffer(cipher);
 
     return true;

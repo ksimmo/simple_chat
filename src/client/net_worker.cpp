@@ -12,7 +12,7 @@ std::vector<unsigned char> onetime_priv = {88,115,84,179,246,20,191,184,91,57,90
 std::vector<unsigned char> onetime_pub = {171,47,165,177,245,20,57,109,110,195,226,118,168,96,230,119,250,129,93,148,28,103,14,173,215,245,232,129,136,225,128,33};
 
 
-NetWorker::NetWorker(QObject* parent, Connector* connector, bool is_alice) : connector(connector)
+NetWorker::NetWorker(QObject* parent, Connector* connector, Database* db, bool is_alice) : connector(connector), db(db)
 {
     this->alice = is_alice;
 
@@ -23,9 +23,7 @@ NetWorker::~NetWorker()
 {
     //delete
     for(auto it=this->ratchets.begin();it!=this->ratchets.end();it++)
-    {
-        //ok update double ratchet information on disk
-        
+    {   
         if(it->second!=nullptr)
             delete it->second;
     }
@@ -241,10 +239,11 @@ void NetWorker::process_packets()
                     std::vector<unsigned char> comb;
                     comb.insert(comb.end(), this->key_identity.get_public().begin(), this->key_identity.get_public().end()); //id pub alice
                     comb.insert(comb.end(), idkey.begin(), idkey.end()); //id pub bob
-                    std::vector<unsigned char> iv;
-                    create_iv(iv);
-                    std::vector<unsigned char> cipher;
-                    aead_encrypt(secret, comb, cipher, iv);
+                    //std::vector<unsigned char> iv;
+                    //create_iv(iv);
+                    //std::vector<unsigned char> cipher;
+                    //aead_encrypt(secret, comb, cipher, iv);
+                    //aead_encrypt(secret, dr->get_key(), cipher, iv);
 
                     
                     //generate initial message
@@ -257,9 +256,10 @@ void NetWorker::process_packets()
                     newpacket->append_string(prekey_type);
                     newpacket->append_byte(byte); //notify if we have used an ot key
                     newpacket->append_buffer(otkey);
-                    newpacket->append_buffer(iv);
-                    //TODO: add dh ratchet key here! (but encrypt using secret!)
-                    newpacket->append_buffer(cipher);
+                    //newpacket->append_buffer(iv);
+                    //newpacket->append_buffer(cipher);
+                    //initial double ratchet message: both identity keys
+                    dr->send_message(newpacket, comb);
                     connector->add_packet(newpacket);
 
                     std::cout << "Sending packet " << newpacket->get_length() << std::endl;
@@ -284,8 +284,16 @@ void NetWorker::process_packets()
                 }
                 else if(type==RMT_ABORT)
                 {
-                    //close this conversation for ever
                     //remove ratchet from database and clear current instance
+                    auto entry = this->ratchets.find(name);
+                    if(entry!=this->ratchets.end()) //ok this ratchet exists
+                    {
+                        //TODO: save some information, notify GUI, ...
+                        //close this conversation for ever
+                        delete entry->second;
+                        this->ratchets.erase(entry);
+                    }
+
                 }
                 else if(type==RMT_X3DH) //initial message
                 {
@@ -326,41 +334,14 @@ void NetWorker::process_packets()
                     std::cout << temp << std::endl;
 
                     //use secret to decrypt initial message and verify if public keys match
-                    std::vector<unsigned char> iv;
-                    packet->read_buffer(iv);
+                    //std::vector<unsigned char> iv;
+                    //packet->read_buffer(iv);
 
-                    std::vector<unsigned char> cipher;
-                    packet->read_buffer(cipher);
+                    //std::vector<unsigned char> cipher;
+                    //packet->read_buffer(cipher);
 
-                    std::vector<unsigned char> plain;
-                    aead_decrypt(secret, plain, cipher, iv);
-
-                    //check if we got the secret right
-                    std::vector<unsigned char> comb;
-                    comb.insert(comb.end(), idkey.begin(), idkey.end()); //id pub alice
-                    comb.insert(comb.end(), this->key_identity.get_public().begin(), this->key_identity.get_public().end()); //id pub bob
-
-                    //compare
-                    bool is_equal = true;
-                    for(int i=0;i<comb.size();i++)
-                    {
-                        if(comb[i]!=plain[i])
-                        {
-                            is_equal = false;
-                            break;
-                        }
-                    }
-
-                    std::cout << "Cipher is equal: " << is_equal << std::endl;
-                    if(!is_equal)
-                    {
-                        //abort creating chat with Alice
-                        Packet* newpacket = new Packet(-1, PK_MSG);
-                        newpacket->append_string("TestUser2");
-                        newpacket->append_byte(RMT_ABORT);
-                        //TODO: maybe append an error message here
-                        connector->add_packet(newpacket);
-                    }
+                    //std::vector<unsigned char> plain;
+                    //aead_decrypt(secret, plain, cipher, iv);
 
                     //ok create a new Ratchet
                     DoubleRatchet* dr = new DoubleRatchet();
@@ -369,6 +350,38 @@ void NetWorker::process_packets()
                     //dr->receive_message(packet, out_comb);
                     this->ratchets.insert(std::make_pair(name, dr));
 
+                    //check if initial message matches
+                    unsigned char msg_type; //parse away msg type byte, as for initial message it is always RMT_MSG
+                    packet->read(msg_type);
+                    std::vector<unsigned char> plain;
+                    dr->receive_message(packet, plain);
+
+                    //check if we got the secret right
+                    std::vector<unsigned char> comb;
+                    comb.insert(comb.end(), idkey.begin(), idkey.end()); //id pub alice
+                    comb.insert(comb.end(), this->key_identity.get_public().begin(), this->key_identity.get_public().end()); //id pub bob
+
+                    //compare
+                    bool is_equal = (comb==plain);
+
+                    std::cout << "Cipher is equal: " << is_equal << std::endl;
+                    if(!is_equal)
+                    {
+                        //abort creating chat with Alice
+                        Packet* newpacket = new Packet(-1, PK_MSG);
+                        newpacket->append_string(name);
+                        newpacket->append_byte(RMT_ABORT);
+                        //TODO: maybe append an error message here
+                        connector->add_packet(newpacket);
+                    }
+                    else
+                    {
+                        Packet* newpacket = new Packet(-1, PK_MSG);
+                        newpacket->append_string(name);
+                        std::vector<unsigned char> test = {'h', 'e', 'l', 'l', 'o', '!'};
+                        dr->send_message(newpacket,test);
+                        connector->add_packet(newpacket);
+                    }
                 }
                 else
                 {
@@ -376,7 +389,11 @@ void NetWorker::process_packets()
                     auto entry = this->ratchets.find(name);
                     if(entry!=this->ratchets.end())
                     {
-                        //entry->second->handle_message(type, packet, msg);
+                        entry->second->receive_message(packet, msg);
+                        std::cout << name << ":";
+                        for(auto i=0;i<msg.size();i++)
+                            std::cout << (char)msg[i];
+                        std::cout << std::endl; //test case: here should come hello!
                     }
                     else
                     {

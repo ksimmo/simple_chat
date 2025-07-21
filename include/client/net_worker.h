@@ -4,6 +4,7 @@
 #include <QObject>
 
 #include "net/net.h"
+#include "db/database.h"
 #include "crypto/crypto.h"
 
 class NetWorker : public QObject
@@ -11,6 +12,7 @@ class NetWorker : public QObject
     Q_OBJECT
 private:
     Connector* connector = nullptr;
+    Database* db = nullptr;
     bool is_active = false;
     bool is_connected = false;
     bool alice = false; //just for testing
@@ -23,7 +25,7 @@ private:
     void process_events();
     void process_packets();
 public:
-    NetWorker(QObject* parent = nullptr, Connector* connector=nullptr, bool is_alice=false);
+    NetWorker(QObject* parent = nullptr, Connector* connector=nullptr, Database* db=nullptr, bool is_alice=false);
     ~NetWorker();
 
     void process();

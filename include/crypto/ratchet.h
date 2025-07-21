@@ -30,6 +30,7 @@ public:
     const std::vector<unsigned char>& get_key() { return this->key; }
     const std::vector<unsigned char>& get_iv() { return this->iv; }
     std::size_t get_turns() { return this->num_turns; }
+    bool is_initialized() { return this->secret.size()>0; }
 
 };
 
@@ -69,8 +70,9 @@ private:
     Key remote_key;
 
     std::size_t old_turns = 0;
-    //keys are dh key and N and we store message key and
-    std::unordered_map<std::pair<std::vector<unsigned char>, std::size_t>, std::pair<std::vector<unsigned char>,std::vector<unsigned char>>> skipped_keys;
+    //TODO: store this in sqlite directly
+    //keys are dh key and N and we store message key and iv
+    std::unordered_map<std::string, std::pair<std::vector<unsigned char>,std::vector<unsigned char>>> skipped_keys;
 
     bool check_skipped_keys(const std::vector<unsigned char>& key, std::size_t n, const std::vector<unsigned char>& cipher, std::vector<unsigned char>& out);
     bool skip_keys(std::size_t n);
