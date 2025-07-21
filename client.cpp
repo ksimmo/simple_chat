@@ -48,6 +48,9 @@ int main(int argc, char* argv[])
     //table for contacts
     db->run_query("CREATE TABLE IF NOT EXISTS contacts (type TEXT NOT NULL UNIQUE, key BLOB NOT NULL, key_type TEXT NOT NULL, last_online TEXT);", nullptr);
 
+    //table for double ratchet parameters (so we can restore chains)
+    db->run_query("CREATE TABLE IF NOT EXISTS dr_params (name TEXT NOT NULL UNIQUE, root_secret BLOB NOT NULL UNIQUE, send_secret BLOB NOT NULL UNIQUE, recv_secret BLOB NOT NULL UNIQUE, send_turns INTEGER NOT NULL, recv_turns INTEGER NOT NULL, old_turns INTEGER NOT NULL, self_key BLOB NOT NULL UNIQUE, remote_key BLOB NOT NULL UNIQUE;", nullptr);
+
     Connector* connector = new Connector(ctx);
 
     QThread* net_thread = new QThread();

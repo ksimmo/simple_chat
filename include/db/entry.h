@@ -11,15 +11,16 @@ class DBEntry
 {
 private:
     int type = SQLITE_NULL;
-    unsigned char* buffer = nullptr;
-    std::size_t length = 0;
+    std::vector<unsigned char> buffer;
 public:
     DBEntry(int type, const void* data=nullptr, std::size_t length=0);
     ~DBEntry();
 
     int get_type() { return this->type; }
-    std::size_t get_length() { return this->length; }
-    unsigned char* get_data() { return this->buffer; }
+    std::size_t get_length() { return this->buffer.size(); }
+    unsigned char* get_data() { return this->buffer.data(); }
+    const std::vector<unsigned char>& get_buffer() { return this->buffer; }
+
     void get_string(std::string& s);
     void get_time(std::chrono::system_clock::time_point& tp);
 };

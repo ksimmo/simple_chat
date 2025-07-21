@@ -7,7 +7,7 @@ KDFChain::KDFChain()
 
 }
 
-KDFChain::KDFChain(const std::vector<unsigned char>& data) : secret(data)
+KDFChain::KDFChain(const std::vector<unsigned char>& data, std::size_t num_turns) : secret(data), num_turns(num_turns)
 {
 
 }
@@ -17,9 +17,9 @@ KDFChain::~KDFChain()
 
 }
 
-void KDFChain::initialize(const std::vector<unsigned char>& data)
+void KDFChain::initialize(const std::vector<unsigned char>& data, std::size_t num_turns)
 {
-    this->num_turns = 0;
+    this->num_turns = num_turns;
     this->secret.clear();
     this->secret.insert(this->secret.end(), data.begin(), data.end());
 }
@@ -101,17 +101,18 @@ bool SymmetricRatchet::recv(bool query_iv)
 }
 
 //////////////////////////////////////////////////////////////
-DoubleRatchet::DoubleRatchet(std::size_t max_skip) : max_skip(max_skip)
+DoubleRatchet::DoubleRatchet(Database* db, std::size_t max_skip) : db(db), max_skip(max_skip)
 {
 }
 
 DoubleRatchet::~DoubleRatchet()
 {
-
+    this->save_state();
 }
 
-bool DoubleRatchet::initialize_alice(const std::vector<unsigned char>& rootkey, const std::vector<unsigned char>& pubkey)
+bool DoubleRatchet::initialize_alice(const std::vector<unsigned char>& rootkey, const std::vector<unsigned char>& pubkey, const std::string& name)
 {
+    this->name = name;
     this->skipped_keys.clear();
     this->self_key.create("X25519");
     this->remote_key.create_from_public("X25519", pubkey);
@@ -129,11 +130,18 @@ bool DoubleRatchet::initialize_alice(const std::vector<unsigned char>& rootkey, 
     this->root_chain.turn(shared_secret, false);
     this->send_chain.initialize(this->root_chain.get_key());
 
+    //create table for skipped messages
+    db->lock();
+    //name: dr=double rachet sm=skipped messages
+    db->run_query("CREATE TABLE IF NOT EXISTS dr"+name+"_sm (dhkey BLOB NOT NULL, n INTEGER NOT NULL, msgkey BLOB NOT NULL, iv BLOB NOT NULL);", nullptr);
+    db->unlock();
+
     return true;
 }
 
-bool DoubleRatchet::initialize_bob(const std::vector<unsigned char>& rootkey, const std::vector<unsigned char>& privkey)
+bool DoubleRatchet::initialize_bob(const std::vector<unsigned char>& rootkey, const std::vector<unsigned char>& privkey, const std::string& name)
 {
+    this->name = name;
     this->skipped_keys.clear();
     this->self_key.create_from_private("X25519", privkey); //signed prekey
 
@@ -141,6 +149,12 @@ bool DoubleRatchet::initialize_bob(const std::vector<unsigned char>& rootkey, co
     this->old_turns = 0;
 
     //next step is to perform step_dh using the key we additionally got from x3dh init message
+
+    //create table
+    db->lock();
+    //name: dr=double rachet sm=skipped messages
+    db->run_query("CREATE TABLE IF NOT EXISTS dr"+name+"_sm (dhkey BLOB NOT NULL, n INTEGER NOT NULL, msgkey BLOB NOT NULL, iv BLOB NOT NULL);", nullptr);
+    db->unlock();
 
     return true;
 }
@@ -266,4 +280,29 @@ bool DoubleRatchet::send_message(Packet* packet, const std::vector<unsigned char
     packet->append_buffer(cipher);
 
     return true;
+}
+
+void DoubleRatchet::save_state()
+{
+    if(this->db==nullptr)
+        return;
+
+    //update dr parameters in db
+    db->lock();
+    db->run_query("INSERT INTO dr_params(name,root_secret,send_secret,recv_secret,send_turns,recv_turns,old_turns,self_key,remote_key) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(name) DO UPDATE SET root_secret=excluded.root_secret, send_secret=excluded.send_secret, recv_secret=excluded.recv_secret, send_turns=excluded.send_turns, recv_turns=excluded.recv_turns, old_turns=excluded.old_turns, self_key=excluded.self_key, remote_key=excluded.remote_key;", 
+        "sbbbiiibb", this->name, this->root_chain.get_hidden().size(), this->root_chain.get_hidden().data(), this->send_chain.get_hidden().size(), this->send_chain.get_hidden().data(),
+        this->recv_chain.get_hidden().size(), this->recv_chain.get_hidden().data(), this->send_chain.get_turns(), this->recv_chain.get_turns(), this->old_turns,
+        this->self_key.get_private().size(), this->self_key.get_private().data(), this->remote_key.get_public().size(), this->remote_key.get_public().data());
+    db->unlock();
+}
+
+void DoubleRatchet::load_state(const std::vector<DBEntry*>& values)
+{
+    this->root_chain.initialize(values[1]->get_buffer());
+    this->send_chain.initialize(values[2]->get_buffer(), *((int*)values[4]->get_data()));
+    this->recv_chain.initialize(values[3]->get_buffer(), *((int*)values[5]->get_data()));
+    this->old_turns = *((int*)values[6]->get_data());
+
+    this->self_key.create_from_private("X25519", values[7]->get_buffer());
+    this->remote_key.create_from_public("X25519", values[8]->get_buffer());
 }

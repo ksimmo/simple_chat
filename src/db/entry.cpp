@@ -9,31 +9,29 @@
 DBEntry::DBEntry(int type, const void* data, std::size_t length) : type(type)
 {
     if(type==SQLITE_INTEGER)
-        this->length = sizeof(int);
+        length = sizeof(int);
     else if(type==SQLITE_FLOAT)
-        this->length = sizeof(double);
-    else
-        this->length = length;
+        length = sizeof(double);
 
     if(data==nullptr)
-        this->length = 0;
+        length = 0;
 
-    if(this->length!=0)
+    if(length!=0)
     {
-        this->buffer = new unsigned char[this->length];
-        std::copy((unsigned char*)data, (unsigned char*)data+this->length, buffer);
+        this->buffer.resize(length);
+        std::copy((unsigned char*)data, (unsigned char*)data+this->buffer.size(), buffer.data());
     }
 }
 
 DBEntry::~DBEntry()
 {
-    if(this->buffer!=nullptr)
-        delete[] this->buffer;
+    //if(this->buffer!=nullptr)
+    //    delete[] this->buffer;
 }
 
 void DBEntry::get_string(std::string& s)
 {
-    s.insert(s.begin(), (char*)this->buffer, (char*)this->buffer+this->length);
+    s.insert(s.begin(), (char*)this->buffer.data(), (char*)this->buffer.data()+this->buffer.size());
 }
 
 void DBEntry::get_time(std::chrono::system_clock::time_point& tp)

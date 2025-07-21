@@ -321,7 +321,7 @@ int main(int argc, char* argv[])
                     std::chrono::system_clock::time_point tp = std::chrono::system_clock::now();
 
                     //save
-                    db->run_query("INSERT INTO prekeys(name,key,key_type,signature,date) VALUES(?,?,?,?,?) ON CONFLICT(name) DO UPDATE SET key=excluded.key, key_type=excluded.key_type, signature=excluded.signature, date=excluded.date",
+                    db->run_query("INSERT INTO prekeys(name,key,key_type,signature,date) VALUES(?,?,?,?,?) ON CONFLICT(name) DO UPDATE SET key=excluded.key, key_type=excluded.key_type, signature=excluded.signature, date=excluded.date;",
                                 "sbsbt", user->get_name().c_str(), prekey.size(), prekey.data(), type.c_str(), signature.size(), signature.data(), &tp);
                 }
                 else

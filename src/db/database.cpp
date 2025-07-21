@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <thread>
 #include "db/database.h"
+#include "logger.h"
 
 Database::Database()
 {
@@ -20,7 +21,8 @@ bool Database::connect(const std::string& name, int flags)
     int status = sqlite3_open_v2(name.c_str(), &this->db, flags, NULL);
     if(status!=SQLITE_OK)
     {
-        std::cerr << "Could not open database " << name << ": " << sqlite3_errmsg(this->db) << " (" << status << ")!" << std::endl;
+        Logger& logger = Logger::instance();
+        logger << LogLevel::ERROR << "Could not open database " << name << ": " << sqlite3_errmsg(this->db) << " (" << status << ")!" << LogEnd();
         return false;
     }
 
@@ -42,6 +44,7 @@ void Database::disconnect()
 
 bool Database::run_query(const std::string& query, const char* fmt, ...)
 {
+    Logger& logger = Logger::instance();
     //clear data from last query
     this->column_names.clear();
     for(auto i=0;i<this->values.size();i++)
@@ -56,7 +59,7 @@ bool Database::run_query(const std::string& query, const char* fmt, ...)
     int result = sqlite3_prepare_v2(this->db, query.c_str(), query.length()+1, &stmt, nullptr);
     if(result!=SQLITE_OK)
     {
-        std::cerr << "Could not prepare query: " << sqlite3_errmsg(this->db) << " (" << result << ")!" << std::endl;
+        logger << LogLevel::ERROR << "Could not prepare query: " << sqlite3_errmsg(this->db) << " (" << result << ")!" << LogEnd();
         return false;
     }
 
@@ -89,7 +92,7 @@ bool Database::run_query(const std::string& query, const char* fmt, ...)
                 int i = va_arg(args, int);
                 if(sqlite3_bind_int(stmt, index, i)!=SQLITE_OK)
                 {
-                    std::cerr << "Could not bind int: " << sqlite3_errmsg(this->db) << " (" << result << ")!" << std::endl;
+                    logger << LogLevel::ERROR << "Could not bind int: " << sqlite3_errmsg(this->db) << " (" << result << ")!" << LogEnd();
                     status = false;
                 }
                 break;
@@ -100,7 +103,7 @@ bool Database::run_query(const std::string& query, const char* fmt, ...)
                 double d = va_arg(args, double);
                 if(sqlite3_bind_double(stmt, index, d)!=SQLITE_OK)
                 {
-                    std::cerr << "Could not bind double: " << sqlite3_errmsg(this->db) << " (" << result << ")!" << std::endl;
+                    logger << LogLevel::ERROR << "Could not bind double: " << sqlite3_errmsg(this->db) << " (" << result << ")!" << LogEnd();
                     status = false;
                 }
                 break;
@@ -110,7 +113,7 @@ bool Database::run_query(const std::string& query, const char* fmt, ...)
                 const char* c = va_arg(args, const char*);
                 if(sqlite3_bind_text(stmt, index, c, -1, SQLITE_STATIC)!=SQLITE_OK)
                 {
-                    std::cerr << "Could not bind text: " << sqlite3_errmsg(this->db) << " (" << result << ")!" << std::endl;
+                    logger << LogLevel::ERROR << "Could not bind text: " << sqlite3_errmsg(this->db) << " (" << result << ")!" << LogEnd();
                     status = false;
                 }
                 break;
@@ -121,7 +124,7 @@ bool Database::run_query(const std::string& query, const char* fmt, ...)
                 void* p = va_arg(args, void*);
                 if(sqlite3_bind_blob(stmt, index, p, length, SQLITE_STATIC)!=SQLITE_OK)
                 {
-                    std::cerr << "Could not bind blob: " << sqlite3_errmsg(this->db) << " (" << result << ")!" << std::endl;
+                    logger << LogLevel::ERROR << "Could not bind blob: " << sqlite3_errmsg(this->db) << " (" << result << ")!" << LogEnd();
                     status = false;
                 }
                 break;
@@ -144,7 +147,7 @@ bool Database::run_query(const std::string& query, const char* fmt, ...)
 
                 if(sqlite3_bind_text(stmt, index, ss.str().c_str(), -1, SQLITE_STATIC)!=SQLITE_OK)
                 {
-                    std::cerr << "Could not bind date: " << sqlite3_errmsg(this->db) << " (" << result << ")!" << std::endl;
+                    logger << LogLevel::ERROR << "Could not bind date: " << sqlite3_errmsg(this->db) << " (" << result << ")!" << LogEnd();
                     status = false;
                 }
 
@@ -233,7 +236,7 @@ bool Database::run_query(const std::string& query, const char* fmt, ...)
         }
         else
         {
-            std::cerr << "[-]Query step error: " << sqlite3_errmsg(this->db) << " (" << result << ")!" << std::endl;
+            logger << LogLevel::ERROR << "[-]Query step error: " << sqlite3_errmsg(this->db) << " (" << result << ")!" << LogEnd();
             status = false;
             break;
         }

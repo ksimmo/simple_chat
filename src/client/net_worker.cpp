@@ -230,10 +230,10 @@ void NetWorker::process_packets()
                     std::cout << temp << std::endl;
 
                     //ok create double ratchet
-                    DoubleRatchet* dr = new DoubleRatchet();
-                    dr->initialize_alice(secret, prekey);
+                    DoubleRatchet* dr = new DoubleRatchet(db);
+                    dr->initialize_alice(secret, prekey, name);
                     //encrypt initial message
-                    this->ratchets.insert(std::make_pair("TestUser", dr)); //currently only 1to1 messages are supported (no groups)
+                    this->ratchets.insert(std::make_pair(name, dr)); //currently only 1to1 messages are supported (no groups)
 
                     //use AEAD scheme to encrypt both identity keys to 
                     std::vector<unsigned char> comb;
@@ -344,8 +344,8 @@ void NetWorker::process_packets()
                     //aead_decrypt(secret, plain, cipher, iv);
 
                     //ok create a new Ratchet
-                    DoubleRatchet* dr = new DoubleRatchet();
-                    dr->initialize_bob(secret, prekey_priv);
+                    DoubleRatchet* dr = new DoubleRatchet(db);
+                    dr->initialize_bob(secret, prekey_priv, name);
                     //directly perform first ratchet step to receive messages from alice
                     //dr->receive_message(packet, out_comb);
                     this->ratchets.insert(std::make_pair(name, dr));
