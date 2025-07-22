@@ -35,7 +35,7 @@ public:
 
     bool is_valid() { return this->fd>=0; } //check if we have a valid socket
     int get_port() { return this->port; }
-    const char* get_address() { return this->address.c_str(); }
+    const std::string& get_address() { return this->address; }
 
     void link(int fd) { this->fd = fd; }
     void unlink() { this->fd = -1; } //careful when using this -> prevent closing of socket upon delete

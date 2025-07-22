@@ -27,13 +27,15 @@ std::vector<unsigned char> pub2 = {242,166,74,118,251,209,138,140,15,177,96,237,
 
 int main(int argc, char* argv[])
 {
-    Logger& logger = Logger::instance(LogLevel::DEBUG, "client.log");
-
     bool alice = false; //is this client alice or bob (just for test case!)
     if(argc>1)
     {
         alice = true;
+        Logger& logger = Logger::instance(LogLevel::DEBUG, "alice.log");
     }
+    else
+        Logger& logger = Logger::instance(LogLevel::DEBUG, "bob.log");
+
 
     QCoreApplication app(argc, argv);
     signal(SIGINT, &quit_loop);
@@ -41,15 +43,17 @@ int main(int argc, char* argv[])
     SSL_CTX* ctx = init_openssl();
 
     Database* db = new Database();
-    db->connect("user.db", SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE); //create if not exists
-    db->run_query("CREATE TABLE IF NOT EXISTS keys (type TEXT NOT NULL, id INTEGER, key BLOB NOT NULL, date TEXT);", nullptr);
-    //db->run_query("INSERT INTO keys (type, id, key, date) VALUES(?, ?, ?);", "tibt", "TestUser", priv.size(), priv.data(), "-");
+    db->connect(alice ? "alice.db" : "bob.db", SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE); //create if not exists
+    db->run_query("CREATE TABLE IF NOT EXISTS keys (type TEXT NOT NULL, id INTEGER, key BLOB NOT NULL, date TEXT NOT NULL);", nullptr);
+
+    //table for double ratchet parameters (so we can restore chains)
+    db->run_query("CREATE TABLE IF NOT EXISTS dr_params (name TEXT NOT NULL UNIQUE, key_type TEXT NOT NULL, root_secret BLOB NOT NULL UNIQUE, send_secret BLOB NOT NULL UNIQUE, recv_secret BLOB NOT NULL UNIQUE, send_turns INTEGER NOT NULL, recv_turns INTEGER NOT NULL, old_turns INTEGER NOT NULL, self_key BLOB NOT NULL UNIQUE, remote_key BLOB NOT NULL UNIQUE);", nullptr);
+
+    //blacklist
+    db->run_query("CREATE TABLE IF NOT EXISTS contacts (name TEXT NOT NULL UNIQUE, date TEXT NOT NULL);", nullptr);
 
     //table for contacts
     db->run_query("CREATE TABLE IF NOT EXISTS contacts (type TEXT NOT NULL UNIQUE, key BLOB NOT NULL, key_type TEXT NOT NULL, last_online TEXT);", nullptr);
-
-    //table for double ratchet parameters (so we can restore chains)
-    db->run_query("CREATE TABLE IF NOT EXISTS dr_params (name TEXT NOT NULL UNIQUE, root_secret BLOB NOT NULL UNIQUE, send_secret BLOB NOT NULL UNIQUE, recv_secret BLOB NOT NULL UNIQUE, send_turns INTEGER NOT NULL, recv_turns INTEGER NOT NULL, old_turns INTEGER NOT NULL, self_key BLOB NOT NULL UNIQUE, remote_key BLOB NOT NULL UNIQUE;", nullptr);
 
     Connector* connector = new Connector(ctx);
 

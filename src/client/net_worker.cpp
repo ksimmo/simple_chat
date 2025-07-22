@@ -1,6 +1,8 @@
 #include <iostream>
 #include <QtCore/QCoreApplication>
 #include <QThread>
+
+#include "logger.h"
 #include "client/net_worker.h"
 
 
@@ -17,6 +19,18 @@ NetWorker::NetWorker(QObject* parent, Connector* connector, Database* db, bool i
     this->alice = is_alice;
 
     //load double ratchet information for existing conversations
+    
+    db->run_query("SELECT * FROM dr_params;", nullptr);
+    for(std::size_t i=0;i<db->values.size();i++)
+    {
+        //DoubleRatchet* dr = new DoubleRatchet(db);
+        //dr->load_state(db->values[i]);
+
+        std::string name;
+        db->values[i][0]->get_string(name);
+        //this->ratchets.insert(std::make_pair(name, dr));
+        std::cout << "Found state of DR for " << name << std::endl;
+    }
 }
 
 NetWorker::~NetWorker()
@@ -224,14 +238,9 @@ void NetWorker::process_packets()
                     std::vector<unsigned char> epkey;
                     x3dh_alice(this->key_identity.get_private(), epkey, idkey, prekey, otkey, signature, id_type, prekey_type, secret);
 
-                    std::string temp;
-                    for(int i=0;i<secret.size();i++)
-                        temp += std::to_string((int)secret[i])+",";
-                    std::cout << temp << std::endl;
-
                     //ok create double ratchet
                     DoubleRatchet* dr = new DoubleRatchet(db);
-                    dr->initialize_alice(secret, prekey, name);
+                    dr->initialize_alice(secret, prekey, name, "X25519");
                     //encrypt initial message
                     this->ratchets.insert(std::make_pair(name, dr)); //currently only 1to1 messages are supported (no groups)
 
@@ -259,6 +268,7 @@ void NetWorker::process_packets()
                     //newpacket->append_buffer(iv);
                     //newpacket->append_buffer(cipher);
                     //initial double ratchet message: both identity keys
+                    newpacket->append_string("X25519"); //the key type we use for double ratchet
                     dr->send_message(newpacket, comb);
                     connector->add_packet(newpacket);
 
@@ -270,6 +280,8 @@ void NetWorker::process_packets()
             {
                 std::string name;
                 packet->read_string(name);
+
+                //TODO: add some information if this is a group or not
 
                 //TODO: check for blacklist
 
@@ -297,6 +309,8 @@ void NetWorker::process_packets()
                 }
                 else if(type==RMT_X3DH) //initial message
                 {
+                    //TODO: if dr is already established -> ignore or overwrite session?
+
                     //get id key
                     std::vector<unsigned char> idkey;
                     packet->read_buffer(idkey);
@@ -324,14 +338,12 @@ void NetWorker::process_packets()
                         otkey.insert(otkey.begin(), onetime_priv.begin(), onetime_priv.end());
                     }
 
+                    std::string dr_keytype;
+                    packet->read_string(dr_keytype);
+
 
                     std::vector<unsigned char> secret;
                     x3dh_bob(this->key_identity.get_private(), prekey_priv, otkey, idkey, epkey, idtype, type, secret);
-
-                    std::string temp;
-                    for(int i=0;i<secret.size();i++)
-                        temp += std::to_string((int)secret[i])+",";
-                    std::cout << temp << std::endl;
 
                     //use secret to decrypt initial message and verify if public keys match
                     //std::vector<unsigned char> iv;
@@ -345,7 +357,7 @@ void NetWorker::process_packets()
 
                     //ok create a new Ratchet
                     DoubleRatchet* dr = new DoubleRatchet(db);
-                    dr->initialize_bob(secret, prekey_priv, name);
+                    dr->initialize_bob(secret, prekey_priv, name, dr_keytype);
                     //directly perform first ratchet step to receive messages from alice
                     //dr->receive_message(packet, out_comb);
                     this->ratchets.insert(std::make_pair(name, dr));

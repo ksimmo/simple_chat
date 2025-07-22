@@ -1,5 +1,5 @@
 # Simple Chat
-A minimal client & server application for a chat system written in C++ which is currently in work.
+A minimal client & server application for a end2end encrypted chat system written in C++ (currently in development).
 However currently only linux is supported, but further OS variants will be added in the future.
 The server-client communication is based on non-blocking sockets and TLS encryption v1.3 using OpenSSL.
 To authenticate a user, a challenge-response procedure is implemented and supports flexible key types (however one should either use ED25510 or ML-DSA variants). A basic sqlite3 interface allows storage of user information and messages on server and client side. 
@@ -9,7 +9,7 @@ To authenticate a user, a challenge-response procedure is implemented and suppor
 - [x] Perform X3DH (improve code, it seems to work -> maybe do a few more tests here)
 - [ ] Non-Blocking Sockets epoll alternative (eg. kqueue for Apple -> test!, etc.)
 - [ ] Client GUI (QT6)
-- [ ] Add MLS or Double Ratchet E2E encryption
+- [x] Add MLS or Double Ratchet E2E encryption (currently Double Ratchet without header encryption)
 - [ ] Add message delivery status
 - [ ] Add configuration system
 

@@ -68,6 +68,7 @@ class DoubleRatchet : public SymmetricRatchet
 {
 private:
     Database* db;
+    std::string key_type;
     std::string name;
     std::size_t max_skip;
     Key self_key;
@@ -89,8 +90,8 @@ public:
     const std::vector<unsigned char>& get_key() { return this->self_key.get_public(); } //only returns public key!
 
     void load_state(const std::vector<DBEntry*>& values);
-    bool initialize_alice(const std::vector<unsigned char>& rootkey, const std::vector<unsigned char>& pubkey, const std::string& name);
-    bool initialize_bob(const std::vector<unsigned char>& rootkey, const std::vector<unsigned char>& privkey, const std::string& name);
+    bool initialize_alice(const std::vector<unsigned char>& rootkey, const std::vector<unsigned char>& pubkey, const std::string& name, const std::string& key_type);
+    bool initialize_bob(const std::vector<unsigned char>& rootkey, const std::vector<unsigned char>& privkey, const std::string& name, const std::string& key_type);
     bool step_dh(const std::vector<unsigned char>& pubkey);
     bool receive_message(Packet* packet, std::vector<unsigned char>& out);
     bool send_message(Packet* packet, const std::vector<unsigned char>& msg);

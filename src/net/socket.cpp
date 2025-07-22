@@ -171,11 +171,11 @@ StatusType Socket::accept(Socket* newsock)
     socklen_t size = sizeof(client);
     int result = ::accept(this->fd, (sockaddr*)&client, &size);
 
-    this->port = ntohs(client.sin_port);
+    newsock->port = ntohs(client.sin_port);
     char temp[INET_ADDRSTRLEN];
     Logger& logger = Logger::instance();
-    if(inet_ntop(AF_INET, &client.sin_addr, temp, sizeof(temp))!=nullptr)
-        this->address = std::string(temp);
+    if(inet_ntop(AF_INET, &client.sin_addr, temp, INET_ADDRSTRLEN)!=nullptr)
+        newsock->address = std::string(temp);
     else
         logger << LogLevel::ERROR << "Cannot query clients ip address: " << strerror(errno) << "(" << errno << ")!" << LogEnd();
 
@@ -191,7 +191,7 @@ StatusType Socket::accept(Socket* newsock)
         }
     }
     else
-        newsock->link(result);
+        newsock->link(result); //let new sock handle the file descriptor
 
     return status;
 }

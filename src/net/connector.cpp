@@ -4,6 +4,7 @@
 #include <cstring>
 #include <sys/epoll.h>
 
+#include "logger.h"
 #include "net/connector.h"
 
 Connector::Connector(SSL_CTX* ctx) : established(false)
@@ -90,9 +91,10 @@ void Connector::shutdown()
 
 bool Connector::initialize(ConnectorType conn_type, const std::string& address,int port, int maxevents)
 {
+    Logger& logger = Logger::instance();
     if(this->is_initialized())
     {
-        std::cout << "[+] Connector is already initialized!" << std::endl;
+        logger << LogLevel::DEBUG << "Connector is already initialized!" << LogEnd();
         return true;
     }
 
@@ -113,7 +115,7 @@ bool Connector::initialize(ConnectorType conn_type, const std::string& address,i
     this->epoll_fd = epoll_create1(0);
     if(this->epoll_fd==-1)
     {
-        std::cerr << "[-]Cannot create epoll: " << strerror(errno) << "(" << errno << ") !" << std::endl;
+        logger << LogLevel::ERROR << "Cannot create epoll: " << strerror(errno) << "(" << errno << ") !" << LogEnd();
         this->shutdown();
         return false;
     }
@@ -122,7 +124,7 @@ bool Connector::initialize(ConnectorType conn_type, const std::string& address,i
     this->kq_fd = kqueue();
     if(this->kq_fd==-1)
     {
-        std::cerr << "[-]Cannot create epoll: " << strerror(errno) << "(" << errno << ") !" << std::endl;
+        logger << LogLevel::ERROR << "[-]Cannot create kqueue: " << strerror(errno) << "(" << errno << ") !" << LogEnd();
         this->shutdown();
         return false;
     }
@@ -133,10 +135,10 @@ bool Connector::initialize(ConnectorType conn_type, const std::string& address,i
         //bind socket to port
         status = this->main_peer->get_socket()->bind(port);
         if(status)
-            std::cout << "[+] Succesfully bound to port " << port << "!" << std::endl;
+            logger << LogLevel::DEBUG << "Succesfully bound to port " << port << "!" << LogEnd();
         else
         {
-            std::cerr << "[-] Failed binding server to port " << port << "!" << std::endl;
+            logger << LogLevel::ERROR << "Failed binding server to port " << port << "!" << LogEnd();
             this->shutdown();
             return status;
         }
@@ -144,10 +146,10 @@ bool Connector::initialize(ConnectorType conn_type, const std::string& address,i
         //start listen for incomming connections
         status = this->main_peer->get_socket()->listen();
         if(status)
-            std::cout << "[+] Succesfully listen!" << std::endl;
+            logger << LogLevel::DEBUG << "Succesfully listen!" << LogEnd();
         else
         {
-            std::cerr << "[-] Failed listen!" << std::endl;
+            logger << LogLevel::ERROR << "Failed listen!" << LogEnd();
             this->shutdown();
             return status;
         }
@@ -157,17 +159,17 @@ bool Connector::initialize(ConnectorType conn_type, const std::string& address,i
         StatusType st = this->main_peer->get_socket()->connect(address, port);
         if(st==ST_SUCCESS)
         {
-            std::cout << "[+] Succesfully connected to " << address << ":" << port << "!" << std::endl;
+            logger << LogLevel::INFO << "Succesfully connected to " << address << ":" << port << "!" << LogEnd();
             status = true;
         }
         else if(st==ST_INPROGRESS)
         {
-            std::cout << "[+] Connection in progress ..." << std::endl;
+            logger << LogLevel::DEBUG << "Connection in progress ..." << LogEnd();
             status = true;
         }
         else
         {
-            std::cerr << "[-] Failed connecting to " << address << ":" << port << "!" << std::endl;
+            logger << LogLevel::ERROR << "Failed connecting to " << address << ":" << port << "!" << LogEnd();
             this->shutdown();
             return status;
         }
@@ -183,7 +185,7 @@ bool Connector::initialize(ConnectorType conn_type, const std::string& address,i
     int result = epoll_ctl(this->epoll_fd, EPOLL_CTL_ADD, ev.data.fd, &ev);
     if(result==-1) 
     {
-        std::cerr << "[-]Cannot create epoll ctl: " << strerror(errno) << "(" << errno << ") !" << std::endl;
+        logger << LogLevel::ERROR << "Cannot create epoll ctl: " << strerror(errno) << "(" << errno << ") !" << LogEnd();
         this->shutdown();
         return false;
     }
@@ -194,7 +196,7 @@ bool Connector::initialize(ConnectorType conn_type, const std::string& address,i
     struct kevent ev;
     EV_SET(&ev, this->main_peer->get_socket(), EVFILT_READ, EV_ADD, 0, 0, nullptr);
     if (kevent(kq, &ev, 1, nullptr, 0, nullptr) == -1) {
-        std::cerr << "[-]Cannot register kqeueue: " << strerror(errno) << "(" << errno << ") !" << std::endl;
+        logger << LogLevel::ERROR << "[-]Cannot register kqeueue: " << strerror(errno) << "(" << errno << ") !" << LogEnd();
         this->shutdown();
         return false;
     }
@@ -212,6 +214,7 @@ bool Connector::initialize(ConnectorType conn_type, const std::string& address,i
 //////////////////////////////
 void Connector::accept_client()
 {
+    Logger& logger = Logger::instance();
     Peer* peer = new Peer(this->ctx);
 
     StatusType status = this->main_peer->get_socket()->accept(peer->get_socket());
@@ -229,7 +232,7 @@ void Connector::accept_client()
             if(result==-1) 
             {
                 delete peer;
-                std::cerr << "[-]Cannot add client to epoll: " << strerror(errno) << "(" << errno << ") !" << std::endl;
+                logger << LogLevel::ERROR << "Cannot add client to epoll: " << strerror(errno) << "(" << errno << ") !" << LogEnd();
                 return;
             }
 #elif USE_KQUEUE
@@ -237,7 +240,7 @@ void Connector::accept_client()
             struct kevent ev;
             EV_SET(&ev, *peer->get_socket(), EVFILT_READ, EV_ADD, 0, 0, nullptr);
             if (kevent(kq, &ev, 1, nullptr, 0, nullptr) == -1) {
-                std::cerr << "[-]Cannot add client to kqueue: " << strerror(errno) << "(" << errno << ") !" << std::endl;
+                logger << LogLevel::ERROR << "[-]Cannot add client to kqueue: " << strerror(errno) << "(" << errno << ") !" << LogEnd();
                 delete peer;
                 return;
             }
@@ -246,12 +249,13 @@ void Connector::accept_client()
             struct kevent ev2;
             EV_SET(&ev2, *peer->get_socket(), EVFILT_WRITE, EV_ADD, 0, 0, nullptr);
             if (kevent(kq, &ev, 1, nullptr, 0, nullptr) == -1) {
-                std::cerr << "[-]Cannot add client to kqueue: " << strerror(errno) << "(" << errno << ") !" << std::endl;
+                logger << LogLevel::ERROR << "[-]Cannot add client to kqueue: " << strerror(errno) << "(" << errno << ") !" << LogEnd();
                 delete peer;
                 return;
             }
 #endif
             peer->set_connected(); //true
+            logger << LogLevel::INFO << "Client (" << (int)*peer->get_socket() << ") connected from " << peer->get_socket()->get_address() << "!" << LogEnd();
             this->connections.insert(std::make_pair((int)*peer->get_socket(), peer)); //here we need explicit conversion to int!!!
             peer->add_event(PE_CONNECTED);
         }
@@ -262,13 +266,14 @@ void Connector::accept_client()
     }
     else
     {
-        std::cerr << "[-]Cannot accept client: " << strerror(errno) << "(" << errno << ") !" << std::endl;
+        logger << LogLevel::ERROR << "Cannot accept client: " << strerror(errno) << "(" << errno << ") !" << LogEnd();
         delete peer;
     }
 }
 
 void Connector::disconnect_client(int fd)
 {
+    Logger& logger = Logger::instance();
 #ifdef USE_EPOLL
     struct epoll_event ev;
     ev.events = EPOLLIN;
@@ -276,7 +281,7 @@ void Connector::disconnect_client(int fd)
     int result = epoll_ctl(this->epoll_fd, EPOLL_CTL_DEL, fd, &ev);
     if(result==-1)
     {
-        std::cerr << "[-]Cannot remove client from epoll!: " << strerror(errno) << "(" << errno << ") !" << std::endl;
+        logger << LogLevel::ERROR << "Cannot remove client from epoll!: " << strerror(errno) << "(" << errno << ") !" << LogEnd();
     }
 #elif USE_KQUEUE
     //remove read notifier
@@ -363,6 +368,7 @@ Packet* Connector::pop_packet()
 //main loop
 void Connector::step(int timeout)
 {
+    Logger& logger = Logger::instance();
     if(!this->is_initialized())
         return;
 #ifdef USE_EPOLL
@@ -372,7 +378,7 @@ void Connector::step(int timeout)
     {
         if(errno!=EINTR)
         {
-            std::cerr << "[-]Cannot wait for epoll: " << strerror(errno) << "(" << errno << ")!" << std::endl;
+            logger << LogLevel::ERROR << "Cannot wait for epoll: " << strerror(errno) << "(" << errno << ")!" << LogEnd();
             this->shutdown();
             return;
         }
@@ -418,7 +424,7 @@ void Connector::step(int timeout)
     {
         if(errno!=EINTR)
         {
-            std::cerr << "[-]Cannot wait for kqueue: " << strerror(errno) << "(" << errno << ") !" << std::endl;
+            logger << LogLevel::ERROR << "Cannot wait for kqueue: " << strerror(errno) << "(" << errno << ") !" << LogEnd();
             this->shutdown();
             return;
         }
@@ -533,7 +539,7 @@ void Connector::step(int timeout)
                 int64_t difference = std::chrono::duration_cast<std::chrono::milliseconds>(now - it->second->get_time_conn()).count();
                 if(difference>=5000)
                 {
-                    std::cout << "[-] " << it->first << "'s ssl handshake took too long!" << std::endl;
+                    logger << LogLevel::INFO << "" << it->first << "'s ssl handshake took too long!" << LogEnd();
                     it->second->should_disconnect = true;
                 }
             }

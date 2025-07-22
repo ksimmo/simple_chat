@@ -47,11 +47,6 @@ public:
 
     bool encapsulate(std::vector<unsigned char>& cipher, std::vector<unsigned char>& secret);
     bool decapsulate(std::vector<unsigned char>& cipher, std::vector<unsigned char>& secret);
-
-    //encapsulate
-    //decapsulate
-
-    //diffie-hellmann
 };
 
 //convert ED25519 to X25519
