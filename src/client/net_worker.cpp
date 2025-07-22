@@ -28,7 +28,7 @@ NetWorker::NetWorker(QObject* parent, Connector* connector, Database* db, bool i
 
         std::string name;
         db->values[i][0]->get_string(name);
-        //this->ratchets.insert(std::make_pair(name, dr));
+        //this->ratchets.insert(std::make_pair(name, dr)); //TODO: uncomment for normal use!
         std::cout << "Found state of DR for " << name << std::endl;
     }
 }
@@ -298,6 +298,9 @@ void NetWorker::process_packets()
                 {
                     //remove ratchet from database and clear current instance
                     auto entry = this->ratchets.find(name);
+                    this->db->lock();
+                    this->db->run_query("DELETE FROM dr_params WHERE name=?;", "s", name.c_str());
+                    this->db->unlock();
                     if(entry!=this->ratchets.end()) //ok this ratchet exists
                     {
                         //TODO: save some information, notify GUI, ...
@@ -358,8 +361,6 @@ void NetWorker::process_packets()
                     //ok create a new Ratchet
                     DoubleRatchet* dr = new DoubleRatchet(db);
                     dr->initialize_bob(secret, prekey_priv, name, dr_keytype);
-                    //directly perform first ratchet step to receive messages from alice
-                    //dr->receive_message(packet, out_comb);
                     this->ratchets.insert(std::make_pair(name, dr));
 
                     //check if initial message matches

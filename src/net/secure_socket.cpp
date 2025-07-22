@@ -1,4 +1,3 @@
-#include <iostream>
 #include "logger.h"
 #include "net/secure_socket.h"
 

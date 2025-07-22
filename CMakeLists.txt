@@ -63,7 +63,7 @@ else()
     target_link_libraries(window_test OpenSSL::SSL OpenSSL::Crypto SQLite::SQLite3 Qt6::Core Qt6::Widgets Qt6::Gui) 
 endif()
 
-set(TESTS test/test_keygen.cpp test/test_x3hd.cpp test/test_aead.cpp test/test_ratchets.cpp)
+set(TESTS test/test_keys.cpp test/test_x3hd.cpp test/test_aead.cpp test/test_ratchets.cpp)
 foreach(test ${TESTS})
     get_filename_component (TName ${test} NAME_WE)
     add_executable(${TName} ${test} ${NET_SOURCES} ${DB_SOURCES} ${CRYPTO_SOURCES} ${OTHER_SOURCES})

@@ -4,6 +4,7 @@
 #include <openssl/bn.h>
 #include <openssl/sha.h>
 
+#include "logger.h"
 #include "crypto/key.h"
 
 Key::Key()
@@ -33,17 +34,18 @@ Key::~Key()
 
 bool Key::extract_private()
 {
+    Logger& logger = Logger::instance();
     std::size_t length = 0;
     if(!EVP_PKEY_get_octet_string_param(this->key, OSSL_PKEY_PARAM_PRIV_KEY, nullptr, 0, &length))
     {
-        std::cerr << "[-] Failed getting private key length: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+        logger << LogLevel::ERROR << "Failed getting private key length: " << ERR_error_string(ERR_get_error(), NULL) << LogEnd();
         return false;
     } 
 
     this->private_key.resize(length);
     if(!EVP_PKEY_get_octet_string_param(this->key, OSSL_PKEY_PARAM_PRIV_KEY, this->private_key.data(), this->private_key.size(), nullptr))
     {
-        std::cerr << "[-] Failed getting private key: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+        logger << LogLevel::ERROR << "Failed getting private key: " << ERR_error_string(ERR_get_error(), NULL) << LogEnd();
         this->private_key.clear();
         return false;
     } 
@@ -53,17 +55,18 @@ bool Key::extract_private()
 
 bool Key::extract_public()
 {
+    Logger& logger = Logger::instance();
     std::size_t length = 0;
     if(!EVP_PKEY_get_octet_string_param(this->key, OSSL_PKEY_PARAM_PUB_KEY, nullptr, 0, &length))
     {
-        std::cerr << "[-] Failed getting private key length: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+        logger << LogLevel::ERROR << "Failed getting public key length: " << ERR_error_string(ERR_get_error(), NULL) << LogEnd();
         return false;
     } 
 
     this->public_key.resize(length);
     if(!EVP_PKEY_get_octet_string_param(this->key, OSSL_PKEY_PARAM_PUB_KEY, this->public_key.data(), this->public_key.size(), nullptr))
     {
-        std::cerr << "[-] Failed getting private key: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+        logger << LogLevel::ERROR << "Failed getting private key: " << ERR_error_string(ERR_get_error(), NULL) << LogEnd();
         this->public_key.clear();
         return false;
     } 
@@ -73,6 +76,7 @@ bool Key::extract_public()
 
 bool Key::create(const std::string& name) //add seed
 {
+    Logger& logger = Logger::instance();
     this->name = name;
     this->is_public = false;
     this->private_key.clear();
@@ -86,7 +90,7 @@ bool Key::create(const std::string& name) //add seed
     int result = EVP_PKEY_keygen_init(ctx);
     if(result<=0)
     {
-        std::cerr << "[-] Cannot initialize key generator: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+        logger << LogLevel::ERROR << "Cannot initialize key generator: " << ERR_error_string(ERR_get_error(), NULL) << LogEnd();
         EVP_PKEY_CTX_free(ctx);
         return false;
     }
@@ -128,7 +132,7 @@ bool Key::create(const std::string& name) //add seed
     result = EVP_PKEY_keygen(ctx, &this->key);
     if(result<=0)
     {
-        std::cerr << "[-] Cannot create key: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+        logger << LogLevel::ERROR << "Cannot create key: " << ERR_error_string(ERR_get_error(), NULL) << LogEnd();
         EVP_PKEY_CTX_free(ctx);
         return false;
     }
@@ -291,6 +295,14 @@ Key* Key::derive_public()
     return k;
 }
 
+bool Key::derive_public(Key& k)
+{
+    if(this->key==nullptr)
+        return false;
+
+    return k.create_from_public(this->name, this->public_key);
+}
+
 
 
 ///////////////////////////////////
@@ -392,7 +404,7 @@ bool Key::encapsulate(std::vector<unsigned char>& cipher, std::vector<unsigned c
     return true;
 }
 
-bool Key::decapsulate(std::vector<unsigned char>& cipher, std::vector<unsigned char>& secret)
+bool Key::decapsulate(const std::vector<unsigned char>& cipher, std::vector<unsigned char>& secret)
 {
     EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new(this->key, nullptr);
     if(ctx==nullptr)
@@ -405,16 +417,16 @@ bool Key::decapsulate(std::vector<unsigned char>& cipher, std::vector<unsigned c
         return false;
     }
 
-    std::size_t length_c = 0;
-    if(EVP_PKEY_decapsulate(ctx, nullptr, &length_c, secret.data(), secret.size()) <= 0)
+    std::size_t length_s = 0;
+    if(EVP_PKEY_decapsulate(ctx, nullptr, &length_s, cipher.data(), cipher.size()) <= 0)
     {
         std::cerr << "[-] Failed getting lengths: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
         EVP_PKEY_CTX_free(ctx);
         return false;
     }
 
-    cipher.resize(length_c);
-    if(EVP_PKEY_decapsulate(ctx, cipher.data(), &length_c, secret.data(), secret.size()) <= 0)
+    secret.resize(length_s);
+    if(EVP_PKEY_decapsulate(ctx, secret.data(), &length_s, cipher.data(), cipher.size()) <= 0)
     {
         std::cerr << "[-] Failed decapsulate: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
         EVP_PKEY_CTX_free(ctx);
@@ -427,9 +439,15 @@ bool Key::decapsulate(std::vector<unsigned char>& cipher, std::vector<unsigned c
 
 
 
-Key* convert_ed25519_to_x25519_private(Key* priv)
+bool convert_ed25519_to_x25519_private(Key& priv, Key& outkey)
 {
-    std::vector<unsigned char> data = priv->get_private();
+    if(priv.get_name()!="ED25519")
+    {
+        std::cerr << "Key needs to be of type ED25519 but is " << priv.get_name() << "!" << std::endl;
+        return false;
+    }
+
+    std::vector<unsigned char> data = priv.get_private();
     std::vector<unsigned char> out;
     out.resize(SHA512_DIGEST_LENGTH);
 
@@ -437,7 +455,7 @@ Key* convert_ed25519_to_x25519_private(Key* priv)
     if(SHA512(data.data(), data.size(), out.data())==0)
     {
         std::cerr << "[-] SHA512 failed: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
-        return nullptr;
+        return false;
     }
 
     out[0] &= 248;
@@ -446,21 +464,23 @@ Key* convert_ed25519_to_x25519_private(Key* priv)
 
     out.resize(data.size());
 
-    Key* k = new Key();
-    std::string s("X25519");
-    if(!k->create_from_private(s, out))
-    {
-        delete k;
-        return nullptr;
-    }
+    if(!outkey.create_from_private("X25519", out))
+        return false;
 
-    return k;
+    return true;
 }
 
 
-Key* convert_ed25519_to_x25519_public(Key* pub)
+bool convert_ed25519_to_x25519_public(Key& pub, Key& outkey)
 {
-    std::vector<unsigned char> data = pub->get_public();
+    if(pub.get_name()!="ED25519")
+    {
+        std::cerr << "Key needs to be of type ED25519 but is " << pub.get_name() << "!" << std::endl;
+        return false;
+    }
+
+    std::vector<unsigned char> data;
+    data.insert(data.end(), pub.get_public().begin(), pub.get_public().end());
 
     std::vector<unsigned char> out;
     out.resize(data.size());
@@ -491,7 +511,7 @@ Key* convert_ed25519_to_x25519_public(Key* pub)
         std::cerr << "[-] Inverse failed: " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
         BN_CTX_end(ctx);
         BN_CTX_free(ctx);
-        return nullptr;
+        return false;
     }
 
     //final result
@@ -501,14 +521,8 @@ Key* convert_ed25519_to_x25519_public(Key* pub)
     BN_CTX_end(ctx);
     BN_CTX_free(ctx);
 
-    Key* k = new Key();
-    std::string s("X25519");
-    if(!k->create_from_public(s, out))
-    {
-        std::cout << "Key creation failed" << std::endl;
-        delete k;
-        return nullptr;
-    }
+    if(!outkey.create_from_public("X25519", out))
+        return false;
 
-    return k;
+    return true;
 }

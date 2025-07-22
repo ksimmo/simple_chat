@@ -4,25 +4,18 @@
 
 #include "server/user.h"
 
-User::User(int fd) : fd(fd)
+User::User(int fd) : fd(fd), key_verify()
 {
     this->time_conn = std::chrono::system_clock::now();
 }
 
 User::~User()
 {
-    if(this->key_verify!=nullptr)
-        delete this->key_verify;
 }
 
-void User::set_key(std::string& name, std::vector<unsigned char>& data)
+bool User::set_key(const std::string& name, const std::vector<unsigned char>& data)
 {
-    this->key_verify = new Key();
-    if(!this->key_verify->create_from_public(name, data))
-    {
-        delete this->key_verify;
-        this->key_verify = nullptr;
-    }
+    return this->key_verify.create_from_public(name, data);
 }
 
 bool User::create_challenge(std::size_t length)
@@ -41,10 +34,10 @@ bool User::create_challenge(std::size_t length)
 
 bool User::check_challenge(std::vector<unsigned char>& signed_challenge, int64_t maxdiff)
 {
-    if(this->key_verify==nullptr || this->challenge.size()==0)
+    if(!this->key_verify.is_initialized() || this->challenge.size()==0)
         return false;
-
-    bool status = this->key_verify->verify_signature(this->challenge, signed_challenge);
+        
+    bool status = this->key_verify.verify_signature(this->challenge, signed_challenge);
 
     std::chrono::time_point<std::chrono::system_clock> end = std::chrono::system_clock::now();
 

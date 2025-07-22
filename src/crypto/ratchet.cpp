@@ -1,4 +1,4 @@
-#include <iostream>
+#include "logger.h"
 #include "crypto/ratchet.h"
 #include "crypto/utilities.h"
 
@@ -27,9 +27,10 @@ void KDFChain::initialize(const std::vector<unsigned char>& data, std::size_t nu
 //turn the ratchet one step
 bool KDFChain::turn(const std::vector<unsigned char>& data, bool query_iv)
 {
+    Logger& logger = Logger::instance();
     if(this->secret.size()==0)
     {
-        std::cerr << "KDFChain is not initialized!" << std::endl;
+        logger << LogLevel::ERROR << "KDFChain is not initialized!" << LogEnd();
         return false;
     }
 
@@ -40,7 +41,7 @@ bool KDFChain::turn(const std::vector<unsigned char>& data, bool query_iv)
     std::vector<unsigned char> out; //buffer for getting the kdf output
     if(!kdf(temp, out, query_iv ? 80: 64)) //NOTE: we assume an iv of 12, however this might change in the future!
     {
-        std::cerr << "[-]Ratchet turn failed!" << std::endl;
+        logger << LogLevel::ERROR << "Ratchet turn failed!" << LogEnd();
         return false;
     }
 
@@ -122,7 +123,7 @@ bool DoubleRatchet::initialize_alice(const std::vector<unsigned char>& rootkey, 
     this->old_turns = 0;
 
     std::vector<unsigned char> shared_secret;
-    if(!dh(&this->self_key, &this->remote_key, shared_secret))
+    if(!dh(this->self_key, this->remote_key, shared_secret))
     {
         return false;
     }
@@ -168,14 +169,14 @@ bool DoubleRatchet::step_dh(const std::vector<unsigned char>& pubkey)
 
     //do dh exchange
     std::vector<unsigned char> shared_secret;
-    dh(&this->self_key, &this->remote_key, shared_secret);
+    dh(this->self_key, this->remote_key, shared_secret);
 
     this->root_chain.turn(shared_secret, false);
     this->recv_chain.initialize(this->root_chain.get_key());
 
     //create new key and perform dh again
     this->self_key.create(this->key_type);
-    dh(&this->self_key, &this->remote_key, shared_secret);
+    dh(this->self_key, this->remote_key, shared_secret);
     this->root_chain.turn(shared_secret, false);
     this->send_chain.initialize(this->root_chain.get_key());
 

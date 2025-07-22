@@ -15,7 +15,7 @@ private:
     std::string name;
     std::chrono::time_point<std::chrono::system_clock> time_conn;
 
-    Key* key_verify = nullptr;
+    Key key_verify;
 
     std::chrono::time_point<std::chrono::system_clock> time_challenge;
     std::vector<unsigned char> challenge;
@@ -31,10 +31,10 @@ public:
 
     void set_name(std::string& s) { this->name = s; }
 
-    void set_key(std::string& name, std::vector<unsigned char>& data);
+    bool set_key(const std::string& name, const std::vector<unsigned char>& data);
 
     bool create_challenge(std::size_t length);
-    std::vector<unsigned char>& get_challenge() { return this->challenge; }
+    const std::vector<unsigned char>& get_challenge() { return this->challenge; }
     std::size_t get_challenge_size() { return this->challenge.size(); }
     bool check_challenge(std::vector<unsigned char>& signed_challenge, int64_t maxdiff=5000);
 };

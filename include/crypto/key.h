@@ -27,8 +27,9 @@ public:
     Key(const Key& other, bool only_public=false);
     ~Key();
 
-    std::string get_name() { return this->name; }
+    const std::string& get_name() { return this->name; }
     bool is_public_only() { return this->is_public; }
+    bool is_initialized() { return this->key!=nullptr; }
 
     operator EVP_PKEY*() { return this->key; }
 
@@ -41,16 +42,17 @@ public:
     const std::vector<unsigned char>& get_private() { return this->private_key; }
     const std::vector<unsigned char>& get_public() { return this->public_key; }
     Key* derive_public();
+    bool derive_public(Key& k);
 
     bool sign_data(const std::vector<unsigned char>& data, std::vector<unsigned char>& signed_data);
     bool verify_signature(const std::vector<unsigned char>& data, const std::vector<unsigned char>& signed_data);
 
     bool encapsulate(std::vector<unsigned char>& cipher, std::vector<unsigned char>& secret);
-    bool decapsulate(std::vector<unsigned char>& cipher, std::vector<unsigned char>& secret);
+    bool decapsulate(const std::vector<unsigned char>& cipher, std::vector<unsigned char>& secret);
 };
 
 //convert ED25519 to X25519
-Key* convert_ed25519_to_x25519_private(Key* priv);
-Key* convert_ed25519_to_x25519_public(Key* pub);
+bool convert_ed25519_to_x25519_private(Key& priv, Key& outkey);
+bool convert_ed25519_to_x25519_public(Key& pub, Key& outkey);
 
 #endif

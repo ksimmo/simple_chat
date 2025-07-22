@@ -3,7 +3,7 @@
 
 #include "key.h"
 
-bool dh(Key* priv, Key* pub, std::vector<unsigned char>& secret);
+bool dh(Key& priv, Key& pub, std::vector<unsigned char>& secret);
 bool kdf(const std::vector<unsigned char>& secret, std::vector<unsigned char>& output, std::size_t length, const std::vector<unsigned char>& salt={}, const std::vector<unsigned char>& info={});
 
 bool create_iv(std::vector<unsigned char>& iv, std::size_t length=16);

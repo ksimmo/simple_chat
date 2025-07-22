@@ -65,7 +65,7 @@ int main(int argc, char* argv[])
     bool status = connector->initialize(CONN_SERVER, std::string(""), 69100, 1000);
     if(!status)
     {
-        std::cerr << "Cannot create host!" << std::endl;
+        logger << LogLevel::ERROR << "Cannot create host!" << LogEnd();
         delete connector;
         cleanup_openssl(ctx);
         return -1;
@@ -88,7 +88,7 @@ int main(int argc, char* argv[])
                 {
                     User* user = new User(ev.fd);
                     users.insert(std::make_pair(ev.fd, user));
-                    std::cout << "[+]Client " << ev.fd << " is ready!" << std::endl;
+                    logger << LogLevel::INFO << "Client " << ev.fd << " is ready!" << LogEnd();
                     break;
                 }
                 case PE_DISCONNECTED:
@@ -108,7 +108,7 @@ int main(int argc, char* argv[])
                     //finalize user
                     delete entry->second;
                     users.erase(entry);
-                    std::cout << "[+]Client " << ev.fd << " disconnected!" << std::endl;
+                    logger << LogLevel::INFO << "Client " << ev.fd << " disconnected!" << LogEnd();
                     break;
                 }
                 case PE_AUTHENTICATED:
@@ -126,13 +126,19 @@ int main(int argc, char* argv[])
                         connector->add_packet(newpacket);
                     }
 
-                    std::cout << "[+]Checking if " << ev.fd << " has undelivered messages!" << std::endl;
                     db->run_query("SELECT sender, msg, date from messages WHERE receiver='"+entry->second->get_name()+"';", nullptr);
+                    logger << LogLevel::INFO << entry->second->get_name() << " has " << db->values.size() << " undelivered messages!" << LogEnd();
                     for(auto i=0;i<db->values.size();i++)
                     {
                         //delete message or mark as sended!
                         
                         //send message
+                        Packet* newpacket = new Packet(ev.fd, PK_MSG);
+                        std::string sender;
+                        db->values[i][0]->get_string(sender);
+                        newpacket->append_string(sender);
+                        newpacket->append_buffer(db->values[i][1]->get_buffer(), false); 
+                        connector->add_packet(newpacket);
                     }
                     break;
                 }
@@ -150,7 +156,7 @@ int main(int argc, char* argv[])
             {
             case PK_LOGIN:
             {
-                std::cout << "[+]Login attempt received from " << packet->get_fd() << "!" << std::endl;
+                logger << LogLevel::INFO << "Login attempt received from " << packet->get_fd() << "!" << LogEnd();
                 std::string s;
                 parse_error = !packet->read_string(s);
                 if(parse_error)
@@ -160,7 +166,7 @@ int main(int argc, char* argv[])
                 db->run_query("SELECT key, key_type from users WHERE name='"+s+"';", nullptr);
                 if(db->values.size()==0) //ok user does not exist!
                 {
-                    std::cout << "[-]Non existent user " << s << std::endl;
+                    logger << LogLevel::INFO << "Non existent user " << s << LogEnd();
                     Packet* newpacket = new Packet(packet->get_fd(), PK_ERROR);
                     newpacket->append((int)PK_ERROR_UNREGISTERED);
                     newpacket->append_string("User "+s+" is not registered!");
@@ -180,15 +186,14 @@ int main(int argc, char* argv[])
                     
                     std::string name; //extract key_type
                     db->values[0][1]->get_string(name);
-                    user->set_key(name, data);
+                    bool status = user->set_key(name, data);
 
                     //check if user exists and then send challenge
-                    bool status = user->create_challenge(32);
+                    status = user->create_challenge(32);
                     if(status)
                     {
-                        std::vector<unsigned char> challenge = user->get_challenge();
                         Packet* newpacket = new Packet(packet->get_fd(), PK_LOGIN_CHALLENGE);
-                        newpacket->append_buffer(challenge);
+                        newpacket->append_buffer(user->get_challenge());
                         connector->add_packet(newpacket);
                     }
                     else
@@ -209,16 +214,16 @@ int main(int argc, char* argv[])
             case PK_LOGIN_CHALLENGE:
             {
                 User* user = users[packet->get_fd()];
-                std::cout << "[+] Received signed challenge from " << packet->get_fd() << std::endl;
+                logger << LogLevel::INFO << "Received signed challenge from " << packet->get_fd() << LogEnd();
                 std::vector<unsigned char> signed_challenge;
                 parse_error = !packet->read_buffer(signed_challenge);
                 if(parse_error)
                     break;
 
                 bool status = user->check_challenge(signed_challenge);
-                std::cout << "[+]Challenge status: " << status << std::endl;
                 if(!status)
                 {
+                    logger << LogLevel::INFO << "Authentification of " << packet->get_fd() << " failed!" << LogEnd();
                     Packet* newpacket = new Packet(packet->get_fd(), PK_ERROR);
                     newpacket->append((int)PK_ERROR_AUTH);
                     newpacket->append_string("Authentification failed!");
@@ -476,7 +481,7 @@ int main(int argc, char* argv[])
 
             if(parse_error)
             {
-                std::cout << "Parsing Error detected!" << std::endl;
+                logger << LogLevel::ERROR << "Parsing Error detected!" << LogEnd();
                 Packet* newpacket = new Packet(packet->get_fd(), PK_ERROR);
                 newpacket->append((int)PK_ERROR_PARSE);
                 connector->add_packet(newpacket);
@@ -495,7 +500,7 @@ int main(int argc, char* argv[])
                 int64_t difference = std::chrono::duration_cast<std::chrono::milliseconds>(now - it->second->get_time_conn()).count();
                 if(difference>=5000) //ok client took too long to authentifiy
                 {
-                    std::cout << "[-] User " << it->first << " took too long to login!" << std::endl;
+                    logger << LogLevel::INFO << "User " << it->first << " took too long to login!" << LogEnd();
                     disconnect_user(it->first);
                 }
             }

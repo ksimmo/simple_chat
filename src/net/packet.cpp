@@ -1,4 +1,3 @@
-#include <iostream>
 #include "net/packet.h"
 
 //create a new packet with specified length
