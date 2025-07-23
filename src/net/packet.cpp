@@ -51,16 +51,6 @@ void Packet::append_byte(unsigned char byte)
     this->write_pos = this->write_pos + 1;
 }
 
-//append any object
-template<typename T>
-void Packet::append(T t)
-{
-    this->resize_if_necessary(sizeof(t));
-    std::copy((unsigned char*)&t, ((unsigned char*)&t)+sizeof(t), 
-                this->data+this->write_pos+sizeof(PacketHeader));
-    this->write_pos += sizeof(t);
-}
-
 //append string
 void Packet::append_string(const std::string& s)
 {

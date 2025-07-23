@@ -88,9 +88,37 @@ void NetWorker::stop()
     this->is_active = false;
 }
 
+void NetWorker::request_online_status(std::string name)
+{
+    Packet* newpacket = new Packet(-1, PK_ONLINE_STATUS);
+    newpacket->append_string(name);
+    connector->add_packet(newpacket);
+}
+
+void NetWorker::request_user_keys(std::string name)
+{
+    if(this->connector->is_initialized())
+    {
+        Packet* newpacket = new Packet(-1, PK_USER_KEYS);
+        newpacket->append_string(name);
+        this->connector->add_packet(newpacket);
+    }
+}
+
+void NetWorker::update_prekey()
+{
+
+}
+
+void NetWorker::update_otkeys(std::size_t num)
+{
+
+}
+
 //////////////////////////////////////////////////
 void NetWorker::process_events()
 {
+    Logger& logger = Logger::instance();
     ConnectorEvent ev = connector->pop_event();
     while (ev.ev!=PE_NONE) //no need to check for fd
     {
@@ -98,16 +126,15 @@ void NetWorker::process_events()
         {
             case PE_HANDSHAKE_FINISHED:
             {
-                std::cout << "[+]Sending login ..." << std::endl;
+                logger << LogLevel::INFO << "Sending login ..." << LogEnd();
                 Packet* packet = new Packet(-1, PK_LOGIN);
                 packet->append_string(this->user_name);
                 connector->add_packet(packet);
-                //maybe also send key
                 break;
             }
             case PE_DISCONNECTED:
             {
-                std::cout << "[+] Disconnected!" << std::endl;
+                logger << LogLevel::INFO << "Disconnected!" << LogEnd();
                 break;
             }
         }
@@ -117,6 +144,7 @@ void NetWorker::process_events()
 
 void NetWorker::process_packets()
 {
+    Logger& logger = Logger::instance();
     //check packets
     Packet* packet = connector->pop_packet();
     while(packet!=nullptr)
@@ -129,12 +157,13 @@ void NetWorker::process_packets()
                 packet->read(type);
                 std::string s;
                 packet->read_string(s);
-                std::cout << "[-]Received error: " << s << std::endl;
+                logger << LogLevel::ERROR << "Received error from server: " << s << LogEnd();
                 break;
             }
             case PK_LOGIN_CHALLENGE:
             {
-                std::cout << "[+]Received Challenge!" << std::endl;
+                //we received the login challenge -> answer
+                logger << LogLevel::INFO << "Received Challenge!" << LogEnd();
                 std::vector<unsigned char> challenge;
                 bool status = packet->read_buffer(challenge);
 
@@ -150,16 +179,14 @@ void NetWorker::process_packets()
             }
             case PK_LOGIN_SUCCESSFULL:
             {
-                std::cout << "[+] Login successfull!" << std::endl;
+                logger << LogLevel::INFO << "Login successfull!" << LogEnd();
                 //now we can send all unsend messages and query if our contacts are online
 
-                //query online status
-                Packet* newpacket = new Packet(-1, PK_ONLINE_STATUS);
+                //query online status (test)
                 if(this->alice)
-                    newpacket->append_string("TestUser");
+                    this->request_online_status("TestUser");
                 else
-                    newpacket->append_string("TestUser2");
-                connector->add_packet(newpacket);
+                    this->request_online_status("TestUser2");
 
                 break;
             }
@@ -171,9 +198,12 @@ void NetWorker::process_packets()
                 packet->read(status);
                 std::cout << name << " online status: " << (bool)status << std::endl;
 
-                //ok upload keys
+                emit online_status_recevied(name, (bool)status); //notify GUI
+
+                //ok upload keys (test)
                 if(!this->alice)
                 {
+                    //TODO: also update keys in database
                     //calculate prekey signature
                     std::vector<unsigned char> prekey_signature;
                     this->key_identity.sign_data(prekey_pub, prekey_signature);
@@ -196,17 +226,29 @@ void NetWorker::process_packets()
                 }
                 else
                 {
-                    Packet* newpacket = new Packet(-1, PK_USER_KEYS);
-                    newpacket->append_string("TestUser");
-                    connector->add_packet(newpacket);
+                    this->request_user_keys("TestUser");
                 }
                 break;
             }
             case PK_UPLOAD_KEYS:
             {
+                unsigned char update_prekey;
+                packet->read(update_prekey);
                 std::size_t num_keys;
                 packet->read(num_keys);
-                std::cout << "Server requested to upload onetime keys: " << num_keys << std::endl; 
+
+                if(update_prekey)
+                {
+                    logger << LogLevel::INFO << "Server requested to update/upload signed prekey!" << LogEnd();
+                    this->update_prekey();
+                }
+                if(num_keys>0)
+                {
+                    logger << "Server requested to upload onetime keys: " << num_keys << LogEnd(); 
+                    this->update_otkeys(num_keys);
+                }
+
+                //ok create and upload onetime keys
                 break;
             }
             case PK_USER_KEYS:
@@ -271,8 +313,6 @@ void NetWorker::process_packets()
                     newpacket->append_string("X25519"); //the key type we use for double ratchet
                     dr->send_message(newpacket, comb);
                     connector->add_packet(newpacket);
-
-                    std::cout << "Sending packet " << newpacket->get_length() << std::endl;
                 }
                 break;
             }
@@ -284,8 +324,6 @@ void NetWorker::process_packets()
                 //TODO: add some information if this is a group or not
 
                 //TODO: check for blacklist
-
-                std::cout << "received message from " << name << " length=" << packet->get_length() << std::endl;
 
                 std::vector<unsigned char> msg;
                 unsigned char type;
@@ -337,12 +375,14 @@ void NetWorker::process_packets()
                         packet->read_buffer(otkey);
                         //check if we have a matching private key
                         otkey.clear();
-                        //in this test case we have -> TODO: search in db
+                        //in this test case we have one -> TODO: search in db
                         otkey.insert(otkey.begin(), onetime_priv.begin(), onetime_priv.end());
                     }
 
                     std::string dr_keytype;
                     packet->read_string(dr_keytype);
+
+                    logger << LogLevel::INFO << "Received X3DH initialisation from " << name << "!" << LogEnd();
 
 
                     std::vector<unsigned char> secret;
@@ -377,9 +417,9 @@ void NetWorker::process_packets()
                     //compare
                     bool is_equal = (comb==plain);
 
-                    std::cout << "Cipher is equal: " << is_equal << std::endl;
                     if(!is_equal)
                     {
+                        logger << LogLevel::INFO << "X3DH handshake with " << name << " not successfull!" << LogEnd();
                         //abort creating chat with Alice
                         Packet* newpacket = new Packet(-1, PK_MSG);
                         newpacket->append_string(name);
@@ -389,6 +429,7 @@ void NetWorker::process_packets()
                     }
                     else
                     {
+                        logger << LogLevel::INFO << "X3DH handshake with " << name << " successfull!" << LogEnd();
                         Packet* newpacket = new Packet(-1, PK_MSG);
                         newpacket->append_string(name);
                         std::vector<unsigned char> test = {'h', 'e', 'l', 'l', 'o', '!'};

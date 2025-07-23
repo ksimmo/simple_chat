@@ -1,4 +1,5 @@
 #include <iostream>
+#include <algorithm>
 #include <signal.h>
 #include <thread>
 #include <atomic>
@@ -113,16 +114,34 @@ int main(int argc, char* argv[])
                 }
                 case PE_AUTHENTICATED:
                 {
-                    //check if enough OT keys are uploaded
                     auto entry = users.find(ev.fd);
                     if(entry==users.end()) //check if user exists
                         break;
+
+                    //check how old the signed-prekey is or if there is even one
+                    //should be fine only doing this on start up (for now we assume users are not online 24h)
+                    unsigned char update_prekey = 0;
+                    db->run_query("SELECT * from prekeys WHERE name='"+entry->second->get_name()+"';", nullptr);
+                    if(db->values.size()==0)
+                        update_prekey = 1;
+                    else
+                    {
+                        auto now = std::chrono::system_clock::now();
+                        std::chrono::system_clock::time_point cur_time;
+                        db->values[0][4]->get_time(cur_time);
+                        auto difference = std::chrono::duration_cast<std::chrono::hours>(now - cur_time).count();
+                        if(difference>378) //greater than two weeks
+                            update_prekey = 1;
+                    }
+
+                    //check if enough OT keys are uploaded
                     db->run_query("SELECT date from otkeys WHERE name='"+entry->second->get_name()+"';", nullptr);
                     std::size_t num_ots = db->values.size();
-                    if(num_ots<10) //we require more ots #TODO: set this via config
+                    if(num_ots<10 || update_prekey) //we require more ots #TODO: set this via config
                     {
                         Packet* newpacket = new Packet(ev.fd, PK_UPLOAD_KEYS);
-                        newpacket->append(10-num_ots);
+                        newpacket->append_byte(update_prekey);
+                        newpacket->append(std::max((std::size_t)0, 10-num_ots));
                         connector->add_packet(newpacket);
                     }
 
@@ -325,7 +344,7 @@ int main(int argc, char* argv[])
                     //get date
                     std::chrono::system_clock::time_point tp = std::chrono::system_clock::now();
 
-                    //save
+                    //update existing key
                     db->run_query("INSERT INTO prekeys(name,key,key_type,signature,date) VALUES(?,?,?,?,?) ON CONFLICT(name) DO UPDATE SET key=excluded.key, key_type=excluded.key_type, signature=excluded.signature, date=excluded.date;",
                                 "sbsbt", user->get_name().c_str(), prekey.size(), prekey.data(), type.c_str(), signature.size(), signature.data(), &tp);
                 }
@@ -344,6 +363,7 @@ int main(int argc, char* argv[])
                         if(parse_error)
                             break;
 
+                        //TODO: check that only a certain amount of ot keys is uploaded!
                         //save
                         db->run_query("INSERT INTO otkeys(name,key,key_type,date) VALUES(?,?,?,?) ON CONFLICT(key) DO NOTHING;",
                                     "sbst", user->get_name().c_str(), onetime.size(), onetime.data(), type.c_str(), &tp);
@@ -398,6 +418,9 @@ int main(int argc, char* argv[])
                     otkey.resize(db->values[0][0]->get_length());
                     std::copy(db->values[0][0]->get_data(), db->values[0][0]->get_data()+otkey.size(), otkey.data());
 
+                    //TODO: maybe delete otkey later if this person used it during an x3dh message
+                    //      or at least make sure that the user may get also informed about his key beeing used
+                    //      this prevents the user from storing already deleted but unused keys
                     //delete otkey from db
                     db->run_query("DELETE FROM otkeys WHERE key=?", "b", otkey.size(), otkey.data());
                 }
@@ -507,6 +530,8 @@ int main(int argc, char* argv[])
         }
 
         //check for undelivered messages beeing too old -> delete
+
+        //again check if a user should update his prekey or if enough ot keys are left
 
         //maybe wait here a few milliseconds
     }

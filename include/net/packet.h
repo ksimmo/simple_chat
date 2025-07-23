@@ -63,7 +63,13 @@ public:
 
     void append_byte(unsigned char byte);
     template<typename T>
-    void append(T t);
+    void append(T t)
+    {
+        this->resize_if_necessary(sizeof(t));
+        std::copy((unsigned char*)&t, ((unsigned char*)&t)+sizeof(t), 
+                    this->data+this->write_pos+sizeof(PacketHeader));
+        this->write_pos += sizeof(t);
+    }
     void append_string(const std::string& s);
     void append_buffer(void* data, std::size_t length, bool write_size=true);
     void append_buffer(const std::vector<unsigned char>& data, bool write_size=true);
