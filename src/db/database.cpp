@@ -109,8 +109,9 @@ bool Database::run_query(const std::string& query, const char* fmt, ...)
             }
             case 's': //string
             {
+                int length = va_arg(args, int); //total length not counting final '\0', pass -1 for automatic counting (up to first '\0')
                 const char* c = va_arg(args, const char*);
-                if(sqlite3_bind_text(stmt, index, c, -1, SQLITE_STATIC)!=SQLITE_OK)
+                if(sqlite3_bind_text(stmt, index, c, length, SQLITE_STATIC)!=SQLITE_OK)
                 {
                     logger << LogLevel::ERROR << "Could not bind text: " << sqlite3_errmsg(this->db) << " (" << result << ")!" << LogEnd();
                     status = false;
@@ -130,11 +131,12 @@ bool Database::run_query(const std::string& query, const char* fmt, ...)
             }
             case 't': //time
             {
-                std::chrono::system_clock::time_point* p = (std::chrono::system_clock::time_point*)va_arg(args, void*);
+                void* p = va_arg(args, void*);
                 
-                std::chrono::system_clock::time_point tp = *p;
+                std::chrono::system_clock::time_point tp = *(std::chrono::system_clock::time_point*)p;
                 std::time_t time = std::chrono::system_clock::to_time_t(tp);
-                std::tm tm = *std::gmtime(&time); //we use GMT (alterantive UTC)
+                //std::tm tm = *std::gmtime(&time); //we use GMT (alterantive UTC)
+                std::tm tm = *std::localtime(&time);
 
                 auto duration = tp.time_since_epoch();
                 auto fractional_seconds = duration - std::chrono::duration_cast<std::chrono::seconds>(duration);
@@ -143,13 +145,13 @@ bool Database::run_query(const std::string& query, const char* fmt, ...)
                 std::stringstream ss;
                 ss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
                 ss << "." << std::setw(3) << std::setfill('0') << microseconds/1000;
+                std::string s = ss.str();
 
-                if(sqlite3_bind_text(stmt, index, ss.str().c_str(), -1, SQLITE_STATIC)!=SQLITE_OK)
+                if(sqlite3_bind_text(stmt, index, s.c_str(), s.length(), SQLITE_TRANSIENT)!=SQLITE_OK) //life time of s is only this scope -> sqlite should copy (transient)
                 {
                     logger << LogLevel::ERROR << "Could not bind date: " << sqlite3_errmsg(this->db) << " (" << result << ")!" << LogEnd();
                     status = false;
                 }
-
                 break;
             }
             }

@@ -4,6 +4,7 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <iomanip>
 
 #include <sqlite3.h>
 #include "logger.h"
@@ -50,14 +51,17 @@ int main(int argc, char* argv[])
     db->run_query("CREATE TABLE IF NOT EXISTS users (name TEXT NOT NULL UNIQUE, key BLOB NOT NULL, key_type TEXT NOT NULL, last_login TEXT NOT NULL);", nullptr);
     //register user (test)
     std::chrono::system_clock::time_point tp = std::chrono::system_clock::now();
-    db->run_query("INSERT INTO users (name, key, key_type, last_login) VALUES(?, ?, ?, ?);", "sbst", "TestUser", pub.size(), pub.data(), "ED25519", &tp);
-    db->run_query("INSERT INTO users (name, key, key_type, last_login) VALUES(?, ?, ?, ?);", "sbst", "TestUser2", pub2.size(), pub2.data(), "ED25519", &tp);
+    db->run_query("INSERT INTO users (name, key, key_type, last_login) VALUES(?, ?, ?, ?);", "sbst", 8, "TestUser", pub.size(), pub.data(), 7, "ED25519", &tp);
+    db->run_query("INSERT INTO users (name, key, key_type, last_login) VALUES(?, ?, ?, ?);", "sbst", 9, "TestUser2", pub2.size(), pub2.data(), 7, "ED25519", &tp);
 
     db->run_query("CREATE TABLE IF NOT EXISTS prekeys (name TEXT NOT NULL UNIQUE, key BLOB NOT NULL, key_type TEXT NOT NULL, signature BLOB NOT NULL, date TEXT NOT NULL);", nullptr);
     db->run_query("CREATE TABLE IF NOT EXISTS otkeys (name TEXT NOT NULL, key BLOB NOT NULL UNIQUE, key_type TEXT NOT NULL, date TEXT NOT NULL);", nullptr);
 
     //create db for storing undelivered messages
-    db->run_query("CREATE TABLE IF NOT EXISTS messages (receiver TEXT NOT NULL, sender TEXT NOT NULL, date TEXT NOT NULL, msg BLOB NOT NULL);", nullptr);
+    db->run_query("CREATE TABLE IF NOT EXISTS messages (receiver TEXT NOT NULL, sender TEXT NOT NULL, date TEXT NOT NULL, type INTEGER, msg BLOB NOT NULL);", nullptr);
+
+    std::vector<unsigned char> testmsg = {RMT_UNENCRYPTED, 't', 'e', 's', 't'};
+    db->run_query("INSERT INTO messages (receiver,sender,date,type,msg) VALUES(?,?,?,?,?);", "sstib", 8, "TestUser", 9, "TestUser2", &tp, PK_MSG, testmsg.size(), testmsg.data());
 
     //setup host
     initialize_socket();
@@ -130,6 +134,7 @@ int main(int argc, char* argv[])
                         std::chrono::system_clock::time_point cur_time;
                         db->values[0][4]->get_time(cur_time);
                         auto difference = std::chrono::duration_cast<std::chrono::hours>(now - cur_time).count();
+                        std::cout << "Key difference " << difference << std::endl;
                         if(difference>378) //greater than two weeks
                             update_prekey = 1;
                     }
@@ -145,19 +150,33 @@ int main(int argc, char* argv[])
                         connector->add_packet(newpacket);
                     }
 
-                    db->run_query("SELECT sender, msg, date from messages WHERE receiver='"+entry->second->get_name()+"';", nullptr);
+                    db->run_query("SELECT sender,date,type,msg from messages WHERE receiver='"+entry->second->get_name()+"';", nullptr);
                     logger << LogLevel::INFO << entry->second->get_name() << " has " << db->values.size() << " undelivered messages!" << LogEnd();
-                    for(auto i=0;i<db->values.size();i++)
+                    //TODO: meh we are overwriting the db values -> store them sepparately (or return them per query)
+                    for(std::size_t i=0;i<db->values.size();i++)
                     {
-                        //delete message or mark as sended!
-                        
-                        //send message
-                        Packet* newpacket = new Packet(ev.fd, PK_MSG);
                         std::string sender;
                         db->values[i][0]->get_string(sender);
+                        
+                        std::chrono::system_clock::time_point tp;
+                        db->values[i][1]->get_time(tp);
+
+                        int type = *((int*)db->values[i][2]->get_data());
+                        
+                        //send message
+                        std::vector<unsigned char> msg = db->values[i][3]->get_buffer();
+                        Packet* newpacket = new Packet(ev.fd, type);
                         newpacket->append_string(sender);
-                        newpacket->append_buffer(db->values[i][1]->get_buffer(), false); 
+                        newpacket->append_buffer(msg, false); 
                         connector->add_packet(newpacket);
+
+                        //check if sender is online
+
+                        //if not store mark as sended message on server
+
+                        //delete message from list
+                        db->run_query("DELETE FROM messages WHERE receiver=? AND sender=? AND date=? AND type=? AND msg=?;", "sstib", entry->second->get_name().length(), entry->second->get_name().c_str(), sender.length(), sender.c_str(), &tp, type, msg.size(), msg.data());
+                        std::cout << i <<  "/" << db->values.size() << ": deleted! " << db->num_affected_rows() << std::endl;
                     }
                     break;
                 }
@@ -346,7 +365,7 @@ int main(int argc, char* argv[])
 
                     //update existing key
                     db->run_query("INSERT INTO prekeys(name,key,key_type,signature,date) VALUES(?,?,?,?,?) ON CONFLICT(name) DO UPDATE SET key=excluded.key, key_type=excluded.key_type, signature=excluded.signature, date=excluded.date;",
-                                "sbsbt", user->get_name().c_str(), prekey.size(), prekey.data(), type.c_str(), signature.size(), signature.data(), &tp);
+                                "sbsbt", user->get_name().length(), user->get_name().c_str(), prekey.size(), prekey.data(), type.length(), type.c_str(), signature.size(), signature.data(), &tp);
                 }
                 else
                 {
@@ -366,7 +385,7 @@ int main(int argc, char* argv[])
                         //TODO: check that only a certain amount of ot keys is uploaded!
                         //save
                         db->run_query("INSERT INTO otkeys(name,key,key_type,date) VALUES(?,?,?,?) ON CONFLICT(key) DO NOTHING;",
-                                    "sbst", user->get_name().c_str(), onetime.size(), onetime.data(), type.c_str(), &tp);
+                                    "sbst", user->get_name().length(), user->get_name().c_str(), onetime.size(), onetime.data(), type.length(), type.c_str(), &tp);
                     }
                 }
                 break;
@@ -479,8 +498,8 @@ int main(int argc, char* argv[])
                     //store message
                     //TODO: set an upper limit of messages
                     std::chrono::system_clock::time_point tp = std::chrono::system_clock::now();
-                    db->run_query("INSERT INTO messages (receiver,sender,date,msg) VALUES(?,?,?,?);", "sstb",
-                            name.c_str(), user->get_name().c_str(), &tp, msg_data.size(), msg_data.data());
+                    db->run_query("INSERT INTO messages (receiver,sender,date,type,msg) VALUES(?,?,?,?,?);", "sstib",
+                            name.length(), name.c_str(), user->get_name().length(), user->get_name().c_str(), &tp, (int)PK_MSG, msg_data.size(), msg_data.data());
 
                     //TODO: send delivery status
                 }

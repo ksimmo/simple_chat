@@ -14,6 +14,7 @@ private:
     std::vector<unsigned char> buffer;
 public:
     DBEntry(int type, const void* data=nullptr, std::size_t length=0);
+    DBEntry(const DBEntry& other);
     ~DBEntry();
 
     int get_type() { return this->type; }

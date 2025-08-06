@@ -292,7 +292,7 @@ void DoubleRatchet::save_state()
     //update dr parameters in db
     db->lock();
     db->run_query("INSERT INTO dr_params(name,key_type,root_secret,send_secret,recv_secret,send_turns,recv_turns,old_turns,self_key,remote_key) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(name) DO UPDATE SET key_type=excluded.key_type, root_secret=excluded.root_secret, send_secret=excluded.send_secret, recv_secret=excluded.recv_secret, send_turns=excluded.send_turns, recv_turns=excluded.recv_turns, old_turns=excluded.old_turns, self_key=excluded.self_key, remote_key=excluded.remote_key;", 
-        "ssbbbiiibb", this->name.c_str(), this->key_type.c_str(), this->root_chain.get_hidden().size(), this->root_chain.get_hidden().data(), this->send_chain.get_hidden().size(), this->send_chain.get_hidden().data(),
+        "ssbbbiiibb", this->name.length(), this->name.c_str(), this->key_type.length(), this->key_type.c_str(), this->root_chain.get_hidden().size(), this->root_chain.get_hidden().data(), this->send_chain.get_hidden().size(), this->send_chain.get_hidden().data(),
         this->recv_chain.get_hidden().size(), this->recv_chain.get_hidden().data(), this->send_chain.get_turns(), this->recv_chain.get_turns(), this->old_turns,
         this->self_key.get_private().size(), this->self_key.get_private().data(), this->remote_key.get_public().size(), this->remote_key.get_public().data());
     db->unlock();

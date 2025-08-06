@@ -29,6 +29,8 @@ public:
     bool run_query(const std::string& query, const char* fmt, ...);
     bool exists_table(const std::string& name);
 
+    int num_affected_rows() { return sqlite3_changes(this->db); }
+
     //TODO: this is not good practice, find a better solution
     //call these before running a query and after processing the queried data only in a multithread usage
     void lock() { this->mutex.lock(); }

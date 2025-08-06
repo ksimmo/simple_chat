@@ -12,6 +12,7 @@ DBEntry::DBEntry(int type, const void* data, std::size_t length) : type(type)
         length = sizeof(int);
     else if(type==SQLITE_FLOAT)
         length = sizeof(double);
+    //else keep length
 
     if(data==nullptr)
         length = 0;
@@ -19,8 +20,15 @@ DBEntry::DBEntry(int type, const void* data, std::size_t length) : type(type)
     if(length!=0)
     {
         this->buffer.resize(length);
-        std::copy((unsigned char*)data, (unsigned char*)data+this->buffer.size(), buffer.data());
+        std::copy((unsigned char*)data, (unsigned char*)data+length, this->buffer.data());
     }
+}
+
+DBEntry::DBEntry(const DBEntry& other)
+{
+    this->type = other.type;
+    this->buffer.resize(other.buffer.size());
+    std::copy(other.buffer.data(), other.buffer.data()+other.buffer.size(), this->buffer.data());
 }
 
 DBEntry::~DBEntry()
@@ -31,14 +39,14 @@ DBEntry::~DBEntry()
 
 void DBEntry::get_string(std::string& s)
 {
-    s.insert(s.begin(), (char*)this->buffer.data(), (char*)this->buffer.data()+this->buffer.size());
+    s.insert(s.begin(), (const char*)this->buffer.data(), (const char*)this->buffer.data()+this->buffer.size());
 }
 
 void DBEntry::get_time(std::chrono::system_clock::time_point& tp)
 {
     std::tm tm = {};
+    tm.tm_isdst = -1; //DST should be determined automatically
     int microseconds = 0;
-    char dot;
 
     std::string datetime;
     this->get_string(datetime);
@@ -46,18 +54,15 @@ void DBEntry::get_time(std::chrono::system_clock::time_point& tp)
     std::stringstream ss(datetime);
     ss >> std::get_time(&tm, "%Y-%m-%d %H:%M:%S");
     
-    //Parse the subseconds if present
-    if (ss >> dot >> microseconds) {
-        // Ensure the microseconds are in the range of [0, 999]
-        microseconds = microseconds % 1000;
-    }
+    if(datetime.length()==23) //means we have appended microseconds
+        microseconds = std::stoi(datetime.substr(20));
 
     //Convert tm to time_t (seconds)
     std::time_t time = std::mktime(&tm);
 
     //Reconstruct the time_point, adding the subseconds (microseconds)
     auto time_point = std::chrono::system_clock::from_time_t(time);
-    auto fractional_seconds = std::chrono::microseconds(microseconds);
+    auto fractional_seconds = std::chrono::microseconds(microseconds*1000); //microseconds are given in 10^6
 
     tp = time_point + fractional_seconds;
 }

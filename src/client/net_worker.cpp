@@ -337,7 +337,7 @@ void NetWorker::process_packets()
                     //remove ratchet from database and clear current instance
                     auto entry = this->ratchets.find(name);
                     this->db->lock();
-                    this->db->run_query("DELETE FROM dr_params WHERE name=?;", "s", name.c_str());
+                    this->db->run_query("DELETE FROM dr_params WHERE name='"+name+"';", nullptr);
                     this->db->unlock();
                     if(entry!=this->ratchets.end()) //ok this ratchet exists
                     {
@@ -444,10 +444,6 @@ void NetWorker::process_packets()
                     if(entry!=this->ratchets.end())
                     {
                         entry->second->receive_message(packet, msg);
-                        std::cout << name << ":";
-                        for(auto i=0;i<msg.size();i++)
-                            std::cout << (char)msg[i];
-                        std::cout << std::endl; //test case: here should come hello!
                     }
                     else
                     {
@@ -457,7 +453,13 @@ void NetWorker::process_packets()
 
                 //process message in client
                 if(msg.size()>0)
+                {
+                    std::cout << name << ": ";
+                    for(auto i=0;i<msg.size();i++)
+                        std::cout << (char)msg[i];
+                    std::cout << std::endl; //test case: here should come hello!
                     emit message_received(name, msg);
+                }
 
                 break;
             }
