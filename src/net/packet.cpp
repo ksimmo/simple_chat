@@ -54,11 +54,11 @@ void Packet::append_byte(unsigned char byte)
 //append string
 void Packet::append_string(const std::string& s)
 {
-    std::size_t total_length = s.length()+1;
-    this->resize_if_necessary(total_length); //take care of '\0'
-    std::copy((unsigned char*)s.c_str(), ((unsigned char*)s.c_str())+total_length, 
+    this->append(s.length());
+    this->resize_if_necessary(s.length()); //take care of '\0'
+    std::copy((unsigned char*)s.c_str(), ((unsigned char*)s.c_str())+s.length(), 
                 this->data+this->write_pos+sizeof(PacketHeader));
-    this->write_pos += total_length;
+    this->write_pos += s.length();
 }
 
 //write arbitrary bytes to packet
@@ -66,7 +66,7 @@ void Packet::append_buffer(void* data, std::size_t length, bool write_size)
 {
     if(write_size)
         this->append(length); //write length to packet
-    this->resize_if_necessary(length); //take care of '\0'
+    this->resize_if_necessary(length);
     std::copy((unsigned char*)data, ((unsigned char*)data)+length, 
                 this->data+this->write_pos+sizeof(PacketHeader));
     this->write_pos += length;
@@ -133,22 +133,14 @@ void Packet::append_fmt(const char* fmt, ...)
 
 bool Packet::read_string(std::string& s)
 {
-    //loop though bytes to find terminating character
-    std::size_t length = 0;
-    for(std::size_t i=this->read_pos;i<this->header->length;i++)
-    {
-        if((char)this->data[i+sizeof(PacketHeader)]=='\0')
-        {
-            length = i-this->read_pos;
-            break;
-        }
-    }
-
-    if(length==0) //we did not find a string
+    s.clear();
+    std::size_t length;
+    bool status = this->read(length);
+    if(!status)
         return false;
 
-    s.insert(0, (char*)this->data+this->read_pos+sizeof(PacketHeader), length); //do not insert '\0'
-    this->read_pos += length+1;
+    s.insert(0, (char*)this->data+this->read_pos+sizeof(PacketHeader), length);
+    this->read_pos += length;
 
     return true;
 }
@@ -168,6 +160,7 @@ bool Packet::read_raw(void* data, std::size_t length)
 
 bool Packet::read_buffer(std::vector<unsigned char>& data)
 {
+    data.clear();
     std::size_t length;
     bool status = this->read(length);
     if(!status)

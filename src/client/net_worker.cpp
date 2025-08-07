@@ -198,7 +198,11 @@ void NetWorker::process_packets()
                 packet->read(status);
                 std::cout << name << " online status: " << (bool)status << std::endl;
 
-                emit online_status_recevied(name, (bool)status); //notify GUI
+                std::string last_online;
+                if(status==0)
+                    packet->read_string(last_online); //we do not care if this fails, then we simply just do not print the last online status
+
+                emit online_status_recevied(name, (bool)status); //notify GUI //TODO: add last date here
 
                 //ok upload keys (test)
                 if(!this->alice)

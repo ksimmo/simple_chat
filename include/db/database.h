@@ -30,6 +30,7 @@ public:
     bool exists_table(const std::string& name);
 
     int num_affected_rows() { return sqlite3_changes(this->db); }
+    void copy_values(std::vector<std::vector<DBEntry*>>& entries); //copy needs to be deleted //TODO: use smart pointers?
 
     //TODO: this is not good practice, find a better solution
     //call these before running a query and after processing the queried data only in a multithread usage

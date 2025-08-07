@@ -264,3 +264,18 @@ bool Database::exists_table(const std::string& name)
 
     return status;
 }
+
+void Database::copy_values(std::vector<std::vector<DBEntry*>>& entries)
+{
+    entries.clear();
+    for(std::size_t i=0;i<this->values.size();i++)
+    {
+        std::vector<DBEntry*> temp;
+        for(std::size_t j=0;j<this->values[i].size();j++)
+        {
+            DBEntry* entry = new DBEntry(*this->values[i][j]);
+            temp.push_back(entry);
+        }
+        entries.push_back(temp);
+    }
+}

@@ -48,7 +48,7 @@ int main(int argc, char* argv[])
     //initialize database
     Database* db = new Database();
     db->connect("server.db", SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
-    db->run_query("CREATE TABLE IF NOT EXISTS users (name TEXT NOT NULL UNIQUE, key BLOB NOT NULL, key_type TEXT NOT NULL, last_login TEXT NOT NULL);", nullptr);
+    db->run_query("CREATE TABLE IF NOT EXISTS users (name TEXT NOT NULL UNIQUE, key BLOB NOT NULL, key_type TEXT NOT NULL, last_login TEXT NOT NULL, last_online TEXT);", nullptr);
     //register user (test)
     std::chrono::system_clock::time_point tp = std::chrono::system_clock::now();
     db->run_query("INSERT INTO users (name, key, key_type, last_login) VALUES(?, ?, ?, ?);", "sbst", 8, "TestUser", pub.size(), pub.data(), 7, "ED25519", &tp);
@@ -110,6 +110,11 @@ int main(int argc, char* argv[])
                         if(entry2!=active_names.end())
                             active_names.erase(entry2);
                     }
+
+                    //update last login time
+                    std::chrono::system_clock::time_point tp = std::chrono::system_clock::now();
+                    db->run_query("UPDATE users SET last_online=? WHERE name='"+entry->second->get_name()+"';", "t", &tp);
+
                     //finalize user
                     delete entry->second;
                     users.erase(entry);
@@ -153,18 +158,23 @@ int main(int argc, char* argv[])
                     db->run_query("SELECT sender,date,type,msg from messages WHERE receiver='"+entry->second->get_name()+"';", nullptr);
                     logger << LogLevel::INFO << entry->second->get_name() << " has " << db->values.size() << " undelivered messages!" << LogEnd();
                     //TODO: meh we are overwriting the db values -> store them sepparately (or return them per query)
-                    for(std::size_t i=0;i<db->values.size();i++)
+
+                    //copy results so we can still run queries
+                    std::vector<std::vector<DBEntry*>> values;
+                    db->copy_values(values);
+
+                    for(std::size_t i=0;i<values.size();i++)
                     {
                         std::string sender;
-                        db->values[i][0]->get_string(sender);
+                        values[i][0]->get_string(sender);
                         
                         std::chrono::system_clock::time_point tp;
-                        db->values[i][1]->get_time(tp);
+                        values[i][1]->get_time(tp);
 
-                        int type = *((int*)db->values[i][2]->get_data());
+                        int type = *((int*)values[i][2]->get_data());
                         
                         //send message
-                        std::vector<unsigned char> msg = db->values[i][3]->get_buffer();
+                        std::vector<unsigned char> msg = values[i][3]->get_buffer();
                         Packet* newpacket = new Packet(ev.fd, type);
                         newpacket->append_string(sender);
                         newpacket->append_buffer(msg, false); 
@@ -176,7 +186,14 @@ int main(int argc, char* argv[])
 
                         //delete message from list
                         db->run_query("DELETE FROM messages WHERE receiver=? AND sender=? AND date=? AND type=? AND msg=?;", "sstib", entry->second->get_name().length(), entry->second->get_name().c_str(), sender.length(), sender.c_str(), &tp, type, msg.size(), msg.data());
-                        std::cout << i <<  "/" << db->values.size() << ": deleted! " << db->num_affected_rows() << std::endl;
+                        std::cout << i <<  "/" << values.size() << ": deleted! " << db->num_affected_rows() << std::endl;
+                    }
+
+                    //delete copy
+                    for(std::size_t i=0;i<values.size();i++)
+                    {
+                        for(std::size_t j=0;j<values[i].size();j++)
+                            delete values[i][j];
                     }
                     break;
                 }
@@ -334,6 +351,15 @@ int main(int argc, char* argv[])
                 Packet* newpacket = new Packet(packet->get_fd(), PK_ONLINE_STATUS);
                 newpacket->append_string(name);
                 newpacket->append((char)status);
+                if(!status)
+                {
+                    //query last time when user was online
+                    db->run_query("SELECT last_online from users WHERE name='"+name+"';", nullptr);
+                    std::string last_online;
+                    if(db->values.size()>0)
+                        db->values[0][0]->get_string(last_online);
+                    newpacket->append_string(last_online);
+                }
                 connector->add_packet(newpacket);
 
                 break;
