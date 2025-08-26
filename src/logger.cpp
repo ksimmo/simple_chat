@@ -32,10 +32,6 @@ Logger& Logger::instance(LogLevel level, const std::string& logfile, bool log_to
     //std::lock_guard<std::mutex> lock(mutex);
     if(instance_pointer==nullptr)
         instance_pointer = new Logger(level, logfile, log_to_console, append);
-    //static std::once_flag initFlag;
-    //std::call_once(initFlag, [&]() {
-    //        instance_pointer = new Logger(level, logfile, log_to_console);
-    //    });
     return *instance_pointer;
 }
 

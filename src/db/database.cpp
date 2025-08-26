@@ -31,27 +31,14 @@ bool Database::connect(const std::string& name, int flags)
 void Database::disconnect()
 {
     sqlite3_close(this->db);
-
-    this->column_names.clear();
-    for(auto i=0;i<this->values.size();i++)
-    {
-        for(auto j=0;j<this->values[i].size();j++)
-            delete this->values[i][j];
-    }
-    this->values.clear();
 }
 
-bool Database::run_query(const std::string& query, const char* fmt, ...)
+bool Database::run_query(const std::string& query, std::vector<std::vector<DBEntry>>& results, const char* fmt, ...)
 {
+    std::lock_guard<std::mutex> lock(this->mutex);
     Logger& logger = Logger::instance();
-    //clear data from last query
-    this->column_names.clear();
-    for(auto i=0;i<this->values.size();i++)
-    {
-        for(auto j=0;j<this->values[i].size();j++)
-            delete this->values[i][j];
-    }
-    this->values.clear();
+
+    results.clear();
 
     //create statement
     sqlite3_stmt* stmt;
@@ -65,12 +52,14 @@ bool Database::run_query(const std::string& query, const char* fmt, ...)
     int num_columns = sqlite3_column_count(stmt);
     int num_binds = sqlite3_bind_parameter_count(stmt);
 
+    /*
     for(int i=0;i<num_columns;i++)
     {
         //std::cout << "Name: " << sqlite3_column_name(stmt,i) << " Type: " << sqlite3_column_type(stmt,i) << std::endl;
         std::string name = const_cast<const char*>(sqlite3_column_name(stmt,i));
         this->column_names.push_back(name);
     }
+    */
 
     bool status = true;
 
@@ -178,51 +167,51 @@ bool Database::run_query(const std::string& query, const char* fmt, ...)
             break;
         else if(result==SQLITE_ROW)
         {
-            std::vector<DBEntry*> temp;
+            std::vector<DBEntry> temp;
             temp.reserve(num_columns);
             //we have data -> loop over columns
             for(int i=0;i<num_columns;i++)
             {
-                DBEntry* entry;
+                DBEntry entry;
                 int dtype = sqlite3_column_type(stmt, i);
                 switch(dtype)
                 {
                 case SQLITE_INTEGER:
                 {
                     int a = sqlite3_column_int(stmt, i);
-                    entry = new DBEntry(dtype, &a);
+                    entry = DBEntry(dtype, &a);
                     break;
                 }
                 case SQLITE_FLOAT:
                 {
                     double d = sqlite3_column_double(stmt, i);
-                    entry = new DBEntry(dtype, &d);
+                    entry = DBEntry(dtype, &d);
                     break;
                 } 
                 case SQLITE_TEXT:
                 {
                     int size = sqlite3_column_bytes(stmt, i);
                     const unsigned char* s = sqlite3_column_text(stmt, i);
-                    entry = new DBEntry(dtype, s, size);
+                    entry = DBEntry(dtype, s, size);
                     break;
                 }
                 case SQLITE_BLOB:
                 {
                     int size = sqlite3_column_bytes(stmt, i);
                     const void* blob = sqlite3_column_blob(stmt, i);
-                    entry = new DBEntry(dtype, blob, size);
+                    entry = DBEntry(dtype, blob, size);
                     break;
                 }
                 default:
                 {
                     //empty element
-                    entry = new DBEntry(SQLITE_NULL, nullptr);
+                    entry = DBEntry(SQLITE_NULL, nullptr);
                     break;
                 }  
                 }   
                 temp.push_back(entry);
             }
-            this->values.push_back(temp);
+            results.push_back(temp);
         }
         else if(result==SQLITE_BUSY)
         {
@@ -256,26 +245,12 @@ bool Database::run_query(const std::string& query, const char* fmt, ...)
 bool Database::exists_table(const std::string& name)
 {
     std::string query = "SELECT name FROM sqlite_master WHERE type='table' AND name='" + name + "';";
-    bool status = this->run_query(query, nullptr);
+    std::vector<std::vector<DBEntry>> results;
+    bool status = this->run_query(query, results, nullptr);
     
     if(status)
         //check returned data for sucess
-        status = this->values.size()>0; //if table exists, we get a row
+        status = results.size()>0; //if table exists, we get a row
 
     return status;
-}
-
-void Database::copy_values(std::vector<std::vector<DBEntry*>>& entries)
-{
-    entries.clear();
-    for(std::size_t i=0;i<this->values.size();i++)
-    {
-        std::vector<DBEntry*> temp;
-        for(std::size_t j=0;j<this->values[i].size();j++)
-        {
-            DBEntry* entry = new DBEntry(*this->values[i][j]);
-            temp.push_back(entry);
-        }
-        entries.push_back(temp);
-    }
 }

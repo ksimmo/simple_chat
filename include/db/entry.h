@@ -13,7 +13,7 @@ private:
     int type = SQLITE_NULL;
     std::vector<unsigned char> buffer;
 public:
-    DBEntry(int type, const void* data=nullptr, std::size_t length=0);
+    DBEntry(int type=SQLITE_NULL, const void* data=nullptr, std::size_t length=0);
     DBEntry(const DBEntry& other);
     ~DBEntry();
 

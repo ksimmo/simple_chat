@@ -44,16 +44,18 @@ int main(int argc, char* argv[])
 
     Database* db = new Database();
     db->connect(alice ? "alice.db" : "bob.db", SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE); //create if not exists
-    db->run_query("CREATE TABLE IF NOT EXISTS keys (type TEXT NOT NULL, id INTEGER, key BLOB NOT NULL, date TEXT NOT NULL);", nullptr);
+
+    std::vector<std::vector<DBEntry>> db_results;
+    db->run_query("CREATE TABLE IF NOT EXISTS keys (type TEXT NOT NULL, id INTEGER, key BLOB NOT NULL, date TEXT NOT NULL);", db_results, nullptr);
 
     //table for double ratchet parameters (so we can restore chains)
-    db->run_query("CREATE TABLE IF NOT EXISTS dr_params (name TEXT NOT NULL UNIQUE, key_type TEXT NOT NULL, root_secret BLOB NOT NULL UNIQUE, send_secret BLOB NOT NULL UNIQUE, recv_secret BLOB NOT NULL UNIQUE, send_turns INTEGER NOT NULL, recv_turns INTEGER NOT NULL, old_turns INTEGER NOT NULL, self_key BLOB NOT NULL UNIQUE, remote_key BLOB NOT NULL UNIQUE);", nullptr);
+    db->run_query("CREATE TABLE IF NOT EXISTS dr_params (name TEXT NOT NULL UNIQUE, key_type TEXT NOT NULL, root_secret BLOB NOT NULL UNIQUE, send_secret BLOB NOT NULL UNIQUE, recv_secret BLOB NOT NULL UNIQUE, send_turns INTEGER NOT NULL, recv_turns INTEGER NOT NULL, old_turns INTEGER NOT NULL, self_key BLOB NOT NULL UNIQUE, remote_key BLOB NOT NULL UNIQUE);", db_results, nullptr);
 
     //blacklist
-    db->run_query("CREATE TABLE IF NOT EXISTS contacts (name TEXT NOT NULL UNIQUE, date TEXT NOT NULL);", nullptr);
+    db->run_query("CREATE TABLE IF NOT EXISTS blacklist (name TEXT NOT NULL UNIQUE);", db_results, nullptr);
 
     //table for contacts
-    db->run_query("CREATE TABLE IF NOT EXISTS contacts (type TEXT NOT NULL UNIQUE, key BLOB NOT NULL, key_type TEXT NOT NULL, last_online TEXT);", nullptr);
+    db->run_query("CREATE TABLE IF NOT EXISTS contacts (type TEXT NOT NULL UNIQUE, key BLOB NOT NULL, key_type TEXT NOT NULL, last_online TEXT);", db_results, nullptr);
 
     Connector* connector = new Connector(ctx);
 

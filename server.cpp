@@ -8,6 +8,7 @@
 
 #include <sqlite3.h>
 #include "logger.h"
+#include "config.h"
 
 #include "net/net.h"
 #include "crypto/crypto.h"
@@ -41,27 +42,35 @@ int main(int argc, char* argv[])
     Logger& logger = Logger::instance(LogLevel::DEBUG, "server.log");
     signal(SIGINT, &quit_loop);
 
+    //setup config
+    nlohmann::json default_config = {
+            {"num_ot_keys", 10},
+        };
+    Config& config = Config::instance(default_config, "");
+
     //for test case (bob, alice)
     std::vector<unsigned char> pub = {71,130,169,175,37,119,84,77,211,33,86,176,125,7,109,171,150,179,34,32,59,161,196,197,178,90,96,18,20,246,14,211};
     std::vector<unsigned char> pub2 = {242,166,74,118,251,209,138,140,15,177,96,237,234,0,148,242,120,50,97,254,145,4,18,93,218,239,245,215,175,44,197,202};
 
     //initialize database
     Database* db = new Database();
+    std::vector<std::vector<DBEntry>> db_results;
     db->connect("server.db", SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
-    db->run_query("CREATE TABLE IF NOT EXISTS users (name TEXT NOT NULL UNIQUE, key BLOB NOT NULL, key_type TEXT NOT NULL, last_login TEXT NOT NULL, last_online TEXT);", nullptr);
-    //register user (test)
+    db->run_query("CREATE TABLE IF NOT EXISTS users (name TEXT NOT NULL UNIQUE, key BLOB NOT NULL, key_type TEXT NOT NULL, last_login TEXT NOT NULL, last_online TEXT);", db_results, nullptr);
+    //register users (test)
     std::chrono::system_clock::time_point tp = std::chrono::system_clock::now();
-    db->run_query("INSERT INTO users (name, key, key_type, last_login) VALUES(?, ?, ?, ?);", "sbst", 8, "TestUser", pub.size(), pub.data(), 7, "ED25519", &tp);
-    db->run_query("INSERT INTO users (name, key, key_type, last_login) VALUES(?, ?, ?, ?);", "sbst", 9, "TestUser2", pub2.size(), pub2.data(), 7, "ED25519", &tp);
+    db->run_query("INSERT INTO users (name, key, key_type, last_login) VALUES(?, ?, ?, ?);", db_results, "sbst", 8, "TestUser", pub.size(), pub.data(), 7, "ED25519", &tp);
+    db->run_query("INSERT INTO users (name, key, key_type, last_login) VALUES(?, ?, ?, ?);", db_results, "sbst", 9, "TestUser2", pub2.size(), pub2.data(), 7, "ED25519", &tp);
 
-    db->run_query("CREATE TABLE IF NOT EXISTS prekeys (name TEXT NOT NULL UNIQUE, key BLOB NOT NULL, key_type TEXT NOT NULL, signature BLOB NOT NULL, date TEXT NOT NULL);", nullptr);
-    db->run_query("CREATE TABLE IF NOT EXISTS otkeys (name TEXT NOT NULL, key BLOB NOT NULL UNIQUE, key_type TEXT NOT NULL, date TEXT NOT NULL);", nullptr);
+    //create key databases if not exists
+    db->run_query("CREATE TABLE IF NOT EXISTS prekeys (name TEXT NOT NULL UNIQUE, key BLOB NOT NULL, key_type TEXT NOT NULL, signature BLOB NOT NULL, date TEXT NOT NULL);", db_results, nullptr);
+    db->run_query("CREATE TABLE IF NOT EXISTS otkeys (name TEXT NOT NULL, key BLOB NOT NULL UNIQUE, key_type TEXT NOT NULL, date TEXT NOT NULL);", db_results, nullptr);
 
     //create db for storing undelivered messages
-    db->run_query("CREATE TABLE IF NOT EXISTS messages (receiver TEXT NOT NULL, sender TEXT NOT NULL, date TEXT NOT NULL, type INTEGER, msg BLOB NOT NULL);", nullptr);
+    db->run_query("CREATE TABLE IF NOT EXISTS messages (receiver TEXT NOT NULL, sender TEXT NOT NULL, date TEXT NOT NULL, type INTEGER, msg BLOB NOT NULL);", db_results, nullptr);
 
     std::vector<unsigned char> testmsg = {RMT_UNENCRYPTED, 't', 'e', 's', 't'};
-    db->run_query("INSERT INTO messages (receiver,sender,date,type,msg) VALUES(?,?,?,?,?);", "sstib", 8, "TestUser", 9, "TestUser2", &tp, PK_MSG, testmsg.size(), testmsg.data());
+    db->run_query("INSERT INTO messages (receiver,sender,date,type,msg) VALUES(?,?,?,?,?);", db_results, "sstib", 8, "TestUser", 9, "TestUser2", &tp, PK_MSG, testmsg.size(), testmsg.data());
 
     //setup host
     initialize_socket();
@@ -113,7 +122,7 @@ int main(int argc, char* argv[])
 
                     //update last login time
                     std::chrono::system_clock::time_point tp = std::chrono::system_clock::now();
-                    db->run_query("UPDATE users SET last_online=? WHERE name='"+entry->second->get_name()+"';", "t", &tp);
+                    db->run_query("UPDATE users SET last_online=? WHERE name='"+entry->second->get_name()+"';", db_results, "t", &tp);
 
                     //finalize user
                     delete entry->second;
@@ -130,14 +139,14 @@ int main(int argc, char* argv[])
                     //check how old the signed-prekey is or if there is even one
                     //should be fine only doing this on start up (for now we assume users are not online 24h)
                     unsigned char update_prekey = 0;
-                    db->run_query("SELECT * from prekeys WHERE name='"+entry->second->get_name()+"';", nullptr);
-                    if(db->values.size()==0)
+                    db->run_query("SELECT * from prekeys WHERE name='"+entry->second->get_name()+"';", db_results, nullptr);
+                    if(db_results.size()==0)
                         update_prekey = 1;
                     else
                     {
                         auto now = std::chrono::system_clock::now();
                         std::chrono::system_clock::time_point cur_time;
-                        db->values[0][4]->get_time(cur_time);
+                        db_results[0][4].get_time(cur_time);
                         auto difference = std::chrono::duration_cast<std::chrono::hours>(now - cur_time).count();
                         std::cout << "Key difference " << difference << std::endl;
                         if(difference>378) //greater than two weeks
@@ -145,36 +154,32 @@ int main(int argc, char* argv[])
                     }
 
                     //check if enough OT keys are uploaded
-                    db->run_query("SELECT date from otkeys WHERE name='"+entry->second->get_name()+"';", nullptr);
-                    std::size_t num_ots = db->values.size();
-                    if(num_ots<10 || update_prekey) //we require more ots #TODO: set this via config
+                    db->run_query("SELECT date from otkeys WHERE name='"+entry->second->get_name()+"';", db_results, nullptr);
+                    std::size_t num_ots = db_results.size();
+                    if(num_ots<config.get<int>("num_ot_keys") || update_prekey) //we require more ots
                     {
                         Packet* newpacket = new Packet(ev.fd, PK_UPLOAD_KEYS);
                         newpacket->append_byte(update_prekey);
-                        newpacket->append(std::max((std::size_t)0, 10-num_ots));
+                        newpacket->append(std::max((std::size_t)0, config.get<int>("num_ot_keys")-num_ots));
                         connector->add_packet(newpacket);
                     }
 
-                    db->run_query("SELECT sender,date,type,msg from messages WHERE receiver='"+entry->second->get_name()+"';", nullptr);
-                    logger << LogLevel::INFO << entry->second->get_name() << " has " << db->values.size() << " undelivered messages!" << LogEnd();
-                    //TODO: meh we are overwriting the db values -> store them sepparately (or return them per query)
+                    db->run_query("SELECT sender,date,type,msg from messages WHERE receiver='"+entry->second->get_name()+"';", db_results, nullptr);
+                    logger << LogLevel::INFO << entry->second->get_name() << " has " << db_results.size() << " undelivered messages!" << LogEnd();
+                    //TODO: meh we are overwriting db values -> store them sepparately (or return them per query)
 
-                    //copy results so we can still run queries
-                    std::vector<std::vector<DBEntry*>> values;
-                    db->copy_values(values);
-
-                    for(std::size_t i=0;i<values.size();i++)
+                    for(std::size_t i=0;i<db_results.size();i++)
                     {
                         std::string sender;
-                        values[i][0]->get_string(sender);
+                        db_results[i][0].get_string(sender);
                         
                         std::chrono::system_clock::time_point tp;
-                        values[i][1]->get_time(tp);
+                        db_results[i][1].get_time(tp);
 
-                        int type = *((int*)values[i][2]->get_data());
+                        int type = *((int*)db_results[i][2].get_data());
                         
                         //send message
-                        std::vector<unsigned char> msg = values[i][3]->get_buffer();
+                        std::vector<unsigned char> msg = db_results[i][3].get_buffer();
                         Packet* newpacket = new Packet(ev.fd, type);
                         newpacket->append_string(sender);
                         newpacket->append_buffer(msg, false); 
@@ -185,15 +190,9 @@ int main(int argc, char* argv[])
                         //if not store mark as sended message on server
 
                         //delete message from list
-                        db->run_query("DELETE FROM messages WHERE receiver=? AND sender=? AND date=? AND type=? AND msg=?;", "sstib", entry->second->get_name().length(), entry->second->get_name().c_str(), sender.length(), sender.c_str(), &tp, type, msg.size(), msg.data());
-                        std::cout << i <<  "/" << values.size() << ": deleted! " << db->num_affected_rows() << std::endl;
-                    }
-
-                    //delete copy
-                    for(std::size_t i=0;i<values.size();i++)
-                    {
-                        for(std::size_t j=0;j<values[i].size();j++)
-                            delete values[i][j];
+                        std::vector<std::vector<DBEntry>> temp;
+                        db->run_query("DELETE FROM messages WHERE receiver=? AND sender=? AND date=? AND type=? AND msg=?;", temp, "sstib", entry->second->get_name().length(), entry->second->get_name().c_str(), sender.length(), sender.c_str(), &tp, type, msg.size(), msg.data());
+                        std::cout << i <<  "/" << temp.size() << ": deleted! " << db->num_affected_rows() << std::endl;
                     }
                     break;
                 }
@@ -218,8 +217,8 @@ int main(int argc, char* argv[])
                     break;
 
                 //check if user exists
-                db->run_query("SELECT key, key_type from users WHERE name='"+s+"';", nullptr);
-                if(db->values.size()==0) //ok user does not exist!
+                db->run_query("SELECT key, key_type from users WHERE name='"+s+"';", db_results, nullptr);
+                if(db_results.size()==0) //ok user does not exist!
                 {
                     logger << LogLevel::INFO << "Non existent user " << s << LogEnd();
                     Packet* newpacket = new Packet(packet->get_fd(), PK_ERROR);
@@ -236,11 +235,11 @@ int main(int argc, char* argv[])
 
                     //extract key
                     std::vector<unsigned char> data;
-                    data.resize(db->values[0][0]->get_length());
-                    std::copy(db->values[0][0]->get_data(), db->values[0][0]->get_data()+data.size(), data.data());
+                    data.resize(db_results[0][0].get_length());
+                    std::copy(db_results[0][0].get_data(), db_results[0][0].get_data()+data.size(), data.data());
                     
                     std::string name; //extract key_type
-                    db->values[0][1]->get_string(name);
+                    db_results[0][1].get_string(name);
                     bool status = user->set_key(name, data);
 
                     //check if user exists and then send challenge
@@ -309,16 +308,16 @@ int main(int argc, char* argv[])
                 if(parse_error)
                     break;
 
-                //TODO: allow more flexible user search
-                db->run_query("SELECT DISTINCT name from users WHERE LOWER(name) LIKE LOWER('"+query+"%') LIMIT 10;", nullptr);
-                int num = db->values.size();
+                //TODO: allow more flexible user search (Levensthein distance? -editdist3)
+                db->run_query("SELECT DISTINCT name from users WHERE LOWER(name) LIKE LOWER('"+query+"%') LIMIT 10;", db_results, nullptr);
+                int num = db_results.size();
 
                 Packet* newpacket = new Packet(packet->get_fd(), PK_USER_SEARCH);
                 newpacket->append(num); //number of search results
                 for(int i=0;i<num;i++)
                 {
                     std::string temp;
-                    db->values[i][0]->get_string(temp);
+                    db_results[i][0].get_string(temp);
                     newpacket->append_string(temp);
                 }
                 connector->add_packet(newpacket);
@@ -336,8 +335,8 @@ int main(int argc, char* argv[])
                 if(parse_error)
                     break;
 
-                db->run_query("SELECT key from users WHERE name='"+name+"';", nullptr);
-                if(db->values.size()==0)
+                db->run_query("SELECT key from users WHERE name='"+name+"';", db_results, nullptr);
+                if(db_results.size()==0)
                 {
                     Packet* newpacket = new Packet(packet->get_fd(), PK_ERROR);
                     newpacket->append((int)PK_ERROR_USER);
@@ -354,10 +353,10 @@ int main(int argc, char* argv[])
                 if(!status)
                 {
                     //query last time when user was online
-                    db->run_query("SELECT last_online from users WHERE name='"+name+"';", nullptr);
+                    db->run_query("SELECT last_online from users WHERE name='"+name+"';", db_results, nullptr);
                     std::string last_online;
-                    if(db->values.size()>0)
-                        db->values[0][0]->get_string(last_online);
+                    if(db_results.size()>0)
+                        db_results[0][0].get_string(last_online);
                     newpacket->append_string(last_online);
                 }
                 connector->add_packet(newpacket);
@@ -391,7 +390,7 @@ int main(int argc, char* argv[])
 
                     //update existing key
                     db->run_query("INSERT INTO prekeys(name,key,key_type,signature,date) VALUES(?,?,?,?,?) ON CONFLICT(name) DO UPDATE SET key=excluded.key, key_type=excluded.key_type, signature=excluded.signature, date=excluded.date;",
-                                "sbsbt", user->get_name().length(), user->get_name().c_str(), prekey.size(), prekey.data(), type.length(), type.c_str(), signature.size(), signature.data(), &tp);
+                                 db_results,"sbsbt", user->get_name().length(), user->get_name().c_str(), prekey.size(), prekey.data(), type.length(), type.c_str(), signature.size(), signature.data(), &tp);
                 }
                 else
                 {
@@ -410,7 +409,7 @@ int main(int argc, char* argv[])
 
                         //TODO: check that only a certain amount of ot keys is uploaded!
                         //save
-                        db->run_query("INSERT INTO otkeys(name,key,key_type,date) VALUES(?,?,?,?) ON CONFLICT(key) DO NOTHING;",
+                        db->run_query("INSERT INTO otkeys(name,key,key_type,date) VALUES(?,?,?,?) ON CONFLICT(key) DO NOTHING;", db_results,
                                     "sbst", user->get_name().length(), user->get_name().c_str(), onetime.size(), onetime.data(), type.length(), type.c_str(), &tp);
                     }
                 }
@@ -422,8 +421,8 @@ int main(int argc, char* argv[])
                 parse_error = !packet->read_string(name);
                 if(parse_error)
                     break;
-                db->run_query("SELECT key, key_type from users WHERE name='"+name+"';", nullptr);
-                if(db->values.size()==0)
+                db->run_query("SELECT key, key_type from users WHERE name='"+name+"';", db_results, nullptr);
+                if(db_results.size()==0)
                 {
                     Packet* newpacket = new Packet(packet->get_fd(), PK_ERROR);
                     newpacket->append((int)PK_ERROR_USER);
@@ -434,40 +433,40 @@ int main(int argc, char* argv[])
 
                 //get user identity key
                 std::vector<unsigned char> data;
-                data.resize(db->values[0][0]->get_length());
-                std::copy(db->values[0][0]->get_data(), db->values[0][0]->get_data()+data.size(), data.data());
+                data.resize(db_results[0][0].get_length());
+                std::copy(db_results[0][0].get_data(), db_results[0][0].get_data()+data.size(), data.data());
 
                 std::string type;
-                db->values[0][1]->get_string(type);
+                db_results[0][1].get_string(type);
 
                 //get user prekey & signature
-                db->run_query("SELECT key, key_type, signature from prekeys WHERE name='"+name+"';", nullptr);
+                db->run_query("SELECT key, key_type, signature from prekeys WHERE name='"+name+"';", db_results, nullptr);
                 std::vector<unsigned char> prekey;
-                prekey.resize(db->values[0][0]->get_length());
-                std::copy(db->values[0][0]->get_data(), db->values[0][0]->get_data()+prekey.size(), prekey.data());
+                prekey.resize(db_results[0][0].get_length());
+                std::copy(db_results[0][0].get_data(), db_results[0][0].get_data()+prekey.size(), prekey.data());
 
                 std::string prekey_type;
-                db->values[0][1]->get_string(prekey_type);
+                db_results[0][1].get_string(prekey_type);
 
                 std::vector<unsigned char> signature;
-                signature.resize(db->values[0][2]->get_length());
-                std::copy(db->values[0][2]->get_data(), db->values[0][2]->get_data()+signature.size(), signature.data());
+                signature.resize(db_results[0][2].get_length());
+                std::copy(db_results[0][2].get_data(), db_results[0][2].get_data()+signature.size(), signature.data());
 
                 //check if user has uploaded onetime-prekeys
-                db->run_query("SELECT key, key_type, date from otkeys WHERE name='"+name+"';", nullptr);
+                db->run_query("SELECT key, key_type, date from otkeys WHERE name='"+name+"';", db_results, nullptr);
                 std::vector<unsigned char> otkey;
                 std::string ot_type;
-                if(db->values.size()>0) //ok we have a ot key available
+                if(db_results.size()>0) //ok we have a ot key available
                 {
-                    db->values[0][1]->get_string(ot_type); //check if format matches
-                    otkey.resize(db->values[0][0]->get_length());
-                    std::copy(db->values[0][0]->get_data(), db->values[0][0]->get_data()+otkey.size(), otkey.data());
+                    db_results[0][1].get_string(ot_type); //check if format matches
+                    otkey.resize(db_results[0][0].get_length());
+                    std::copy(db_results[0][0].get_data(), db_results[0][0].get_data()+otkey.size(), otkey.data());
 
                     //TODO: maybe delete otkey later if this person used it during an x3dh message
                     //      or at least make sure that the user may get also informed about his key beeing used
                     //      this prevents the user from storing already deleted but unused keys
                     //delete otkey from db
-                    db->run_query("DELETE FROM otkeys WHERE key=?", "b", otkey.size(), otkey.data());
+                    db->run_query("DELETE FROM otkeys WHERE key=?", db_results, "b", otkey.size(), otkey.data());
                 }
 
                 Packet* newpacket = new Packet(packet->get_fd(), PK_USER_KEYS);
@@ -496,8 +495,8 @@ int main(int argc, char* argv[])
                 if(parse_error)
                     break;
                 //check if user exists
-                db->run_query("SELECT key from users WHERE name='"+name+"';", nullptr);
-                if(db->values.size()==0)
+                db->run_query("SELECT key from users WHERE name='"+name+"';", db_results, nullptr);
+                if(db_results.size()==0)
                 {
                     Packet* newpacket = new Packet(packet->get_fd(), PK_ERROR);
                     newpacket->append((int)PK_ERROR_USER);
@@ -524,7 +523,7 @@ int main(int argc, char* argv[])
                     //store message
                     //TODO: set an upper limit of messages
                     std::chrono::system_clock::time_point tp = std::chrono::system_clock::now();
-                    db->run_query("INSERT INTO messages (receiver,sender,date,type,msg) VALUES(?,?,?,?,?);", "sstib",
+                    db->run_query("INSERT INTO messages (receiver,sender,date,type,msg) VALUES(?,?,?,?,?);", db_results, "sstib",
                             name.length(), name.c_str(), user->get_name().length(), user->get_name().c_str(), &tp, (int)PK_MSG, msg_data.size(), msg_data.data());
 
                     //TODO: send delivery status
@@ -577,6 +576,8 @@ int main(int argc, char* argv[])
         //check for undelivered messages beeing too old -> delete
 
         //again check if a user should update his prekey or if enough ot keys are left
+
+        //update user status
 
         //maybe wait here a few milliseconds
     }

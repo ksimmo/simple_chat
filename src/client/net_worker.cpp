@@ -6,7 +6,7 @@
 #include "client/net_worker.h"
 
 
-//bobs prekeys
+//bobs prekeys (test)
 std::vector<unsigned char> prekey_priv = {8,83,187,43,148,19,188,53,99,229,107,144,43,158,179,170,128,167,169,231,66,88,146,73,158,51,83,189,223,188,212,66};
 std::vector<unsigned char> prekey_pub = {58,77,177,71,18,83,130,156,204,19,166,43,156,242,109,19,120,85,32,154,154,129,143,6,173,80,127,29,222,216,9,94};
 
@@ -19,15 +19,15 @@ NetWorker::NetWorker(QObject* parent, Connector* connector, Database* db, bool i
     this->alice = is_alice;
 
     //load double ratchet information for existing conversations
-    
-    db->run_query("SELECT * FROM dr_params;", nullptr);
-    for(std::size_t i=0;i<db->values.size();i++)
+    std::vector<std::vector<DBEntry>> db_results;
+    db->run_query("SELECT * FROM dr_params;", db_results, nullptr);
+    for(std::size_t i=0;i<db_results.size();i++)
     {
         //DoubleRatchet* dr = new DoubleRatchet(db);
         //dr->load_state(db->values[i]);
 
         std::string name;
-        db->values[i][0]->get_string(name);
+        db_results[i][0].get_string(name);
         //this->ratchets.insert(std::make_pair(name, dr)); //TODO: uncomment for normal use!
         std::cout << "Found state of DR for " << name << std::endl;
     }
@@ -340,9 +340,8 @@ void NetWorker::process_packets()
                 {
                     //remove ratchet from database and clear current instance
                     auto entry = this->ratchets.find(name);
-                    this->db->lock();
-                    this->db->run_query("DELETE FROM dr_params WHERE name='"+name+"';", nullptr);
-                    this->db->unlock();
+                    std::vector<std::vector<DBEntry>> db_results;
+                    this->db->run_query("DELETE FROM dr_params WHERE name='"+name+"';", db_results, nullptr);
                     if(entry!=this->ratchets.end()) //ok this ratchet exists
                     {
                         //TODO: save some information, notify GUI, ...

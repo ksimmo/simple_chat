@@ -133,10 +133,9 @@ bool DoubleRatchet::initialize_alice(const std::vector<unsigned char>& rootkey, 
     this->send_chain.initialize(this->root_chain.get_key());
 
     //create table for skipped messages
-    db->lock();
     //name: dr=double rachet sm=skipped messages
-    db->run_query("CREATE TABLE IF NOT EXISTS dr_"+name+"_sm (dhkey BLOB NOT NULL, n INTEGER NOT NULL, msgkey BLOB NOT NULL, iv BLOB NOT NULL);", nullptr);
-    db->unlock();
+    std::vector<std::vector<DBEntry>> db_results;
+    db->run_query("CREATE TABLE IF NOT EXISTS dr_"+name+"_sm (dhkey BLOB NOT NULL, n INTEGER NOT NULL, msgkey BLOB NOT NULL, iv BLOB NOT NULL);", db_results, nullptr);
 
     return true;
 }
@@ -154,10 +153,9 @@ bool DoubleRatchet::initialize_bob(const std::vector<unsigned char>& rootkey, co
     //next step is to perform step_dh using the key we additionally got from x3dh init message
 
     //create table
-    db->lock();
     //name: dr=double ratchet sm=skipped messages
-    db->run_query("CREATE TABLE IF NOT EXISTS dr_"+name+"_sm (dhkey BLOB NOT NULL, n INTEGER NOT NULL, msgkey BLOB NOT NULL, iv BLOB NOT NULL);", nullptr);
-    db->unlock();
+    std::vector<std::vector<DBEntry>> db_results;
+    db->run_query("CREATE TABLE IF NOT EXISTS dr_"+name+"_sm (dhkey BLOB NOT NULL, n INTEGER NOT NULL, msgkey BLOB NOT NULL, iv BLOB NOT NULL);", db_results, nullptr);
 
     return true;
 }
@@ -185,18 +183,18 @@ bool DoubleRatchet::step_dh(const std::vector<unsigned char>& pubkey)
 
 bool DoubleRatchet::check_skipped_keys(const std::vector<unsigned char>& key, std::size_t n, const std::vector<unsigned char>& cipher, std::vector<unsigned char>& out)
 {
-    db->lock();
-    db->run_query("SELECT * FROM dr_"+this->name+"_sm WHERE dhkey=? AND n=?;", "bi", key.size(), key.data(), (int)n);
+    std::vector<std::vector<DBEntry>> db_results;
+    db->run_query("SELECT * FROM dr_"+this->name+"_sm WHERE dhkey=? AND n=?;", db_results, "bi", key.size(), key.data(), (int)n);
 
     bool result = false;
-    if(db->values.size()==1)
+    if(db_results.size()==1)
     {
-        aead_decrypt(db->values[0][2]->get_buffer(), out, cipher, db->values[0][3]->get_buffer()); //key and iv
+        aead_decrypt(db_results[0][2].get_buffer(), out, cipher, db_results[0][3].get_buffer()); //key and iv
         //remove this entry
-        db->run_query("DELETE FROM dr_"+this->name+"_sm WHERE dhkey=? AND n=?;", "bi", key.size(), key.data(), (int)n);
+        std::vector<std::vector<DBEntry>> temp;
+        db->run_query("DELETE FROM dr_"+this->name+"_sm WHERE dhkey=? AND n=?;", temp, "bi", key.size(), key.data(), (int)n);
         result = true;
     }
-    db->unlock();
 
     return result;
 }
@@ -209,16 +207,15 @@ bool DoubleRatchet::skip_keys(std::size_t until)
     if(this->get_recv_turns()+this->max_skip<until) //ok we skipped to much messages
         return false;
 
+    std::vector<std::vector<DBEntry>> db_results;
     while (this->get_recv_turns()<until)
     {
         this->recv(true);
 
         //save key for later usage
-        db->lock();
-        db->run_query("INSERT INTO dr_"+this->name+"_sm(dhkey,n,msgkey,iv) VALUES(?,?,?,?);", "bibb",this->remote_key.get_public().size(), this->remote_key.get_public().data(),
+        db->run_query("INSERT INTO dr_"+this->name+"_sm(dhkey,n,msgkey,iv) VALUES(?,?,?,?);", db_results, "bibb",this->remote_key.get_public().size(), this->remote_key.get_public().data(),
                     this->get_recv_turns(), this->get_recv_key().size(), this->get_recv_key().data(),
                     this->get_recv_iv().size(), this->get_recv_iv().data());
-        db->unlock();
     }
     
     return true;
@@ -290,12 +287,11 @@ void DoubleRatchet::save_state()
         return;
 
     //update dr parameters in db
-    db->lock();
+    std::vector<std::vector<DBEntry>> db_results;
     db->run_query("INSERT INTO dr_params(name,key_type,root_secret,send_secret,recv_secret,send_turns,recv_turns,old_turns,self_key,remote_key) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(name) DO UPDATE SET key_type=excluded.key_type, root_secret=excluded.root_secret, send_secret=excluded.send_secret, recv_secret=excluded.recv_secret, send_turns=excluded.send_turns, recv_turns=excluded.recv_turns, old_turns=excluded.old_turns, self_key=excluded.self_key, remote_key=excluded.remote_key;", 
-        "ssbbbiiibb", this->name.length(), this->name.c_str(), this->key_type.length(), this->key_type.c_str(), this->root_chain.get_hidden().size(), this->root_chain.get_hidden().data(), this->send_chain.get_hidden().size(), this->send_chain.get_hidden().data(),
+        db_results,"ssbbbiiibb", this->name.length(), this->name.c_str(), this->key_type.length(), this->key_type.c_str(), this->root_chain.get_hidden().size(), this->root_chain.get_hidden().data(), this->send_chain.get_hidden().size(), this->send_chain.get_hidden().data(),
         this->recv_chain.get_hidden().size(), this->recv_chain.get_hidden().data(), this->send_chain.get_turns(), this->recv_chain.get_turns(), this->old_turns,
         this->self_key.get_private().size(), this->self_key.get_private().data(), this->remote_key.get_public().size(), this->remote_key.get_public().data());
-    db->unlock();
 }
 
 void DoubleRatchet::load_state(const std::vector<DBEntry*>& values)

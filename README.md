@@ -30,12 +30,23 @@ database->connect("test.db") //default is read-write only
 database->connect("test.db", SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE) 
 
 //run query
-database->run_query("SELECT * FROM table;", nullptr); //select query does not need input data
-std::vector<std::string> columns = database->column_names; //get column names of last query
-std::vector<std::vector<DBEntry*>> values = database->values; //get queried data from last run
+std::vector<std::vector<DBEntry>> results;
+database->run_query("SELECT * FROM table;", results, nullptr); //select query does not need input data
+
+//loop through data
+for(auto i=0;i<results.size();i++) //rows
+{
+        for(auto j=0;j<results[i].size();j++) //columns
+        {
+                //results[i][j].get_string(); //for string
+                //results[i][j].get_time(); //for time;
+                //std::vector<unsigned char> buffer = results[i][j].get_buffer(); //return vector containing raw data
+                unsigned char* data = results[i][j].get_data(); //pointer to data (alternative)
+        }
+}
 
 //if data is updated/inserted into the table
-database->run_query("INSERT INTO table (col1, col2, col3) VALUES(?,?,?);", "itb",
+database->run_query("INSERT INTO table (col1, col2, col3) VALUES(?,?,?);", results, "isb",
         integer1, std::string, int buffer_size, void* buffer); //b always needs an additional int for size
 
 //close

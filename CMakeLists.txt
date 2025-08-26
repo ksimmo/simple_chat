@@ -22,7 +22,7 @@ message(STATUS "Using Qt6 ${QT6_VERSION}")
 qt_standard_project_setup()
 
 #somehow qt include dirs are not found
-include_directories(${CMAKE_SOURCE_DIR}/include ${OPENSSL_INCLUDE_DIRS} ${SQLITE3_INCLUDE_DIRS} /usr/include/qt6)
+include_directories(${CMAKE_SOURCE_DIR}/include ${OPENSSL_INCLUDE_DIRS} ${SQLITE3_INCLUDE_DIRS} /usr/include/qt6 external)
 
 
 set(NET_SOURCES src/net/socket.cpp
@@ -35,7 +35,7 @@ set(CRYPTO_SOURCES src/crypto/key.cpp src/crypto/utilities.cpp src/crypto/ratche
 
 set(DB_SOURCES src/db/database.cpp src/db/entry.cpp)
 
-set(OTHER_SOURCES src/logger.cpp)
+set(OTHER_SOURCES src/logger.cpp src/config.cpp)
 
 set(SERVER_SOURCES src/server/user.cpp)
 

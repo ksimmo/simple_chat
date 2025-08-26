@@ -17,7 +17,7 @@ DBEntry::DBEntry(int type, const void* data, std::size_t length) : type(type)
     if(data==nullptr)
         length = 0;
 
-    if(length!=0)
+    if(length!=0 && data!=nullptr)
     {
         this->buffer.resize(length);
         std::copy((unsigned char*)data, (unsigned char*)data+length, this->buffer.data());
